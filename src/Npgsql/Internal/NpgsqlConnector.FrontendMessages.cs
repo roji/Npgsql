@@ -146,7 +146,7 @@ namespace Npgsql.Internal
         }
 
         internal async Task WriteBind(
-            List<NpgsqlParameter> inputParameters,
+            List<NpgsqlParameter> parameters,
             string portal,
             string statement,
             bool allResultTypesAreUnknown,
@@ -172,19 +172,19 @@ namespace Npgsql.Internal
 
             var formatCodesSum = 0;
             var paramsLength = 0;
-            foreach (var p in inputParameters)
+            foreach (var p in parameters)
             {
                 formatCodesSum += (int)p.FormatCode;
                 p.LengthCache?.Rewind();
                 paramsLength += p.ValidateAndGetLength();
             }
 
-            var formatCodeListLength = formatCodesSum == 0 ? 0 : formatCodesSum == inputParameters.Count ? 1 : inputParameters.Count;
+            var formatCodeListLength = formatCodesSum == 0 ? 0 : formatCodesSum == parameters.Count ? 1 : parameters.Count;
 
             var messageLength = headerLength         +
                 sizeof(short) * formatCodeListLength +                  // List of format codes
                 sizeof(short)                        +                  // Number of parameters
-                sizeof(int) * inputParameters.Count  +                  // Parameter lengths
+                sizeof(int) * parameters.Count  +                       // Parameter lengths
                 paramsLength                         +                  // Parameter values
                 sizeof(short)                        +                  // Number of result format codes
                 sizeof(short) * (unknownResultTypeList?.Length ?? 1);   // Result format codes
@@ -206,7 +206,7 @@ namespace Npgsql.Internal
             }
             else if (formatCodeListLength > 1)
             {
-                foreach (var p in inputParameters)
+                foreach (var p in parameters)
                 {
                     if (WriteBuffer.WriteSpaceLeft < 2)
                         await Flush(async, cancellationToken);
@@ -217,9 +217,9 @@ namespace Npgsql.Internal
             if (WriteBuffer.WriteSpaceLeft < 2)
                 await Flush(async, cancellationToken);
 
-            WriteBuffer.WriteUInt16((ushort)inputParameters.Count);
+            WriteBuffer.WriteUInt16((ushort)parameters.Count);
 
-            foreach (var param in inputParameters)
+            foreach (var param in parameters)
             {
                 param.LengthCache?.Rewind();
                 await param.WriteWithLength(WriteBuffer, async, cancellationToken);

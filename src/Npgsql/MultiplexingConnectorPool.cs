@@ -261,23 +261,11 @@ namespace Npgsql
                 // but the main thread continues to handle other commands on other connectors.
                 if (_autoPrepare)
                 {
+                    // TODO: Need to log based on numPrepared like in non-multiplexing mode...
                     var numPrepared = 0;
-                    foreach (var statement in command._statements)
-                    {
-                        // If this statement isn't prepared, see if it gets implicitly prepared.
-                        // Note that this may return null (not enough usages for automatic preparation).
-                        if (!statement.IsPrepared)
-                            statement.PreparedStatement = connector.PreparedStatementManager.TryGetAutoPrepared(statement);
-                        if (statement.PreparedStatement is PreparedStatement pStatement)
-                        {
+                    foreach (var statement in command.InternalBatchCommands)
+                        if (statement.TryAutoPrepare(connector))
                             numPrepared++;
-                            if (pStatement?.State == PreparedState.NotPrepared)
-                            {
-                                pStatement.State = PreparedState.BeingPrepared;
-                                statement.IsPreparing = true;
-                            }
-                        }
-                    }
                 }
 
                 var written = connector.CommandsInFlightWriter!.TryWrite(command);

@@ -54,7 +54,7 @@ namespace Npgsql
         /// <summary>
         /// Holds the list of statements being executed by this reader.
         /// </summary>
-        List<NpgsqlStatement> _statements = default!;
+        List<NpgsqlBatchCommand> _statements = default!;
 
         /// <summary>
         /// The index of the current query resultset we're processing (within a multiquery)
@@ -148,7 +148,7 @@ namespace Npgsql
         }
 
         internal void Init(
-            NpgsqlCommand command, CommandBehavior behavior, List<NpgsqlStatement> statements, Task? sendTask = null)
+            NpgsqlCommand command, CommandBehavior behavior, List<NpgsqlBatchCommand> statements, Task? sendTask = null)
         {
             Command = command;
             _connection = command.Connection;
@@ -464,7 +464,7 @@ namespace Npgsql
                         continue;
                     }
 
-                    if (StatementIndex == 0 && Command.Parameters.HasOutputParameters)
+                    if (!Command.IsWrappedByBatch && StatementIndex == 0 && Command.Parameters.HasOutputParameters)
                     {
                         // If output parameters are present and this is the first row of the first resultset,
                         // we must always read it in non-sequential mode because it will be traversed twice (once
@@ -503,9 +503,10 @@ namespace Npgsql
 
                 // Reference the triggering statement from the exception (for batching)
                 if (e is PostgresException postgresException &&
+                    Command.IsWrappedByBatch &&
                     StatementIndex >= 0 && StatementIndex < _statements.Count)
                 {
-                    postgresException.Statement = _statements[StatementIndex];
+                    postgresException.BatchCommand = _statements[StatementIndex];
                 }
 
                 // An error means all subsequent statements were skipped by PostgreSQL.
@@ -646,9 +647,10 @@ namespace Npgsql
 
                 // Reference the triggering statement from the exception (for batching)
                 if (e is PostgresException postgresException &&
+                    Command.IsWrappedByBatch &&
                     StatementIndex >= 0 && StatementIndex < _statements.Count)
                 {
-                    postgresException.Statement = _statements[StatementIndex];
+                    postgresException.BatchCommand = _statements[StatementIndex];
                 }
 
                 throw;
@@ -764,7 +766,24 @@ namespace Npgsql
         /// <summary>
         /// Gets the number of rows changed, inserted, or deleted by execution of the SQL statement.
         /// </summary>
-        public override int RecordsAffected => _recordsAffected.HasValue ? (int)_recordsAffected.Value : -1;
+        /// <value>
+        /// The number of rows changed, inserted, or deleted. -1 for SELECT statements; 0 if no rows were affected or the statement failed.
+        /// </value>
+        public override int RecordsAffected
+            => !_recordsAffected.HasValue
+                ? -1
+                : _recordsAffected > int.MaxValue
+                    ? throw new OverflowException(
+                        $"The number of records affected exceeds int.MaxValue. Use {nameof(Rows)}.")
+                    : (int)_recordsAffected;
+
+        /// <summary>
+        /// Gets the number of rows changed, inserted, or deleted by execution of the SQL statement.
+        /// </summary>
+        /// <value>
+        /// The number of rows changed, inserted, or deleted. 0 for SELECT statements, if no rows were affected or the statement failed.
+        /// </value>
+        public ulong Rows => _recordsAffected ?? 0;
 
         /// <summary>
         /// Returns details about each statement that this reader will or has executed.
@@ -777,7 +796,8 @@ namespace Npgsql
         /// a statement-by-statement basis, unlike <see cref="NpgsqlDataReader.RecordsAffected"/>
         /// which exposes an aggregation across all statements.
         /// </remarks>
-        public IReadOnlyList<NpgsqlStatement> Statements => _statements.AsReadOnly();
+        [Obsolete("Use the new DbBatch API")]
+        public IReadOnlyList<NpgsqlBatchCommand> Statements => _statements.AsReadOnly();
 
         /// <summary>
         /// Gets a value that indicates whether this DbDataReader contains one or more rows.
