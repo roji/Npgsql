@@ -1,4 +1,4 @@
-#if !NET6_0_OR_GREATER
+//#if !NET6_0_OR_GREATER
 using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
@@ -119,4 +119,4 @@ namespace System.Data.Common
         public abstract DbBatchCommand this[int index] { get; set; }
     }
 }
-#endif
+//#endif
