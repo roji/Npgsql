@@ -11,6 +11,7 @@ using Npgsql.PostgresTypes;
 using Npgsql.TypeMapping;
 using Npgsql.Util;
 using NpgsqlTypes;
+using static Npgsql.Util.Statics;
 
 namespace Npgsql
 {
@@ -313,8 +314,26 @@ namespace Npgsql
                     return _cachedDbType.Value;
                 if (_npgsqlDbType.HasValue)
                     return _cachedDbType ??= GlobalTypeMapper.Instance.ToDbType(_npgsqlDbType.Value);
-                if (_value != null)   // Infer from value but don't cache
+
+                if (_value is not null)
+                {
+                    if (!LegacyTimestampBehavior)
+                    {
+                        switch (_value)
+                        {
+                        case DateTime dateTime:
+                            return dateTime.Kind == DateTimeKind.Utc
+                                ? DbType.DateTimeOffset
+                                : DbType.DateTime;
+                        case NpgsqlDateTime npgsqlDateTime:
+                            return npgsqlDateTime.Kind == DateTimeKind.Utc
+                                ? DbType.DateTimeOffset
+                                : DbType.DateTime;
+                        }
+                    }
+
                     return GlobalTypeMapper.Instance.ToDbType(_value.GetType());
+                }
 
                 return DbType.Object;
             }
@@ -348,8 +367,27 @@ namespace Npgsql
             {
                 if (_npgsqlDbType.HasValue)
                     return _npgsqlDbType.Value;
-                if (_value != null)   // Infer from value
+
+                if (_value is not null)
+                {
+                    if (!LegacyTimestampBehavior)
+                    {
+                        switch (_value)
+                        {
+                        case DateTime dateTime:
+                            return dateTime.Kind == DateTimeKind.Utc
+                                ? NpgsqlDbType.TimestampTz
+                                : NpgsqlDbType.Timestamp;
+                        case NpgsqlDateTime npgsqlDateTime:
+                            return npgsqlDateTime.Kind == DateTimeKind.Utc
+                                ? NpgsqlDbType.TimestampTz
+                                : NpgsqlDbType.Timestamp;
+                        }
+                    }
+
                     return GlobalTypeMapper.Instance.ToNpgsqlDbType(_value.GetType());
+                }
+
                 return NpgsqlDbType.Unknown;
             }
             set
@@ -497,7 +535,7 @@ namespace Npgsql
             else if (_dataTypeName != null)
                 Handler = typeMapper.GetByDataTypeName(_dataTypeName);
             else if (_value != null)
-                Handler = typeMapper.GetByClrType(_value.GetType());
+                Handler = typeMapper.GetByValue(_value);
             else
                 throw new InvalidOperationException($"Parameter '{ParameterName}' must have its value set");
         }

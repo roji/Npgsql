@@ -1,11 +1,11 @@
 ﻿using System;
 using System.Data;
-using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
 using Npgsql.Internal;
 using Npgsql.TypeMapping;
 using NpgsqlTypes;
+using static Npgsql.Util.Statics;
 
 namespace Npgsql
 {
@@ -76,6 +76,8 @@ namespace Npgsql
                 Handler = typeMapper.GetByNpgsqlDbType(_npgsqlDbType.Value);
             else if (_dataTypeName != null)
                 Handler = typeMapper.GetByDataTypeName(_dataTypeName);
+            else if (!LegacyTimestampBehavior && (typeof(T) == typeof(DateTime) || typeof(T) == typeof(NpgsqlDateTime)))
+                Handler = typeMapper.GetByValue(TypedValue);
             else
                 Handler = typeMapper.GetByClrType(typeof(T));
         }

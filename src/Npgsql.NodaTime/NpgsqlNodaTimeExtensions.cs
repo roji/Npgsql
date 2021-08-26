@@ -4,6 +4,7 @@ using NodaTime;
 using Npgsql.NodaTime.Internal;
 using Npgsql.TypeMapping;
 using NpgsqlTypes;
+using static Npgsql.NodaTime.Internal.NodaTimeUtils;
 
 // ReSharper disable once CheckNamespace
 namespace Npgsql
@@ -18,23 +19,50 @@ namespace Npgsql
         /// </summary>
         /// <param name="mapper">The type mapper to set up (global or connection-specific)</param>
         public static INpgsqlTypeMapper UseNodaTime(this INpgsqlTypeMapper mapper)
-            => mapper
-                .AddMapping(new NpgsqlTypeMappingBuilder
-                {
-                    PgTypeName = "timestamp without time zone",
-                    NpgsqlDbType = NpgsqlDbType.Timestamp,
-                    DbTypes = new[] { DbType.DateTime, DbType.DateTime2 },
-                    ClrTypes = new[] { typeof(Instant), typeof(LocalDateTime), typeof(DateTime) },
-                    InferredDbType = DbType.DateTime,
-                    TypeHandlerFactory = new TimestampHandlerFactory()
-                }.Build())
-                .AddMapping(new NpgsqlTypeMappingBuilder
-                {
-                    PgTypeName = "timestamp with time zone",
-                    NpgsqlDbType = NpgsqlDbType.TimestampTz,
-                    ClrTypes = new[] { typeof(ZonedDateTime), typeof(OffsetDateTime), typeof(DateTimeOffset) },
-                    TypeHandlerFactory = new TimestampTzHandlerFactory()
-                }.Build())
+        {
+            if (LegacyTimestampBehavior)
+            {
+                mapper.AddMapping(new NpgsqlTypeMappingBuilder
+                    {
+                        PgTypeName = "timestamp without time zone",
+                        NpgsqlDbType = NpgsqlDbType.Timestamp,
+                        DbTypes = new[] { DbType.DateTime, DbType.DateTime2 },
+                        ClrTypes = new[] { typeof(Instant), typeof(LocalDateTime), typeof(DateTime) },
+                        InferredDbType = DbType.DateTime,
+                        TypeHandlerFactory = new LegacyTimestampHandlerFactory()
+                    }.Build())
+                    .AddMapping(new NpgsqlTypeMappingBuilder
+                    {
+                        PgTypeName = "timestamp with time zone",
+                        DbTypes = new[] { DbType.DateTimeOffset },
+                        NpgsqlDbType = NpgsqlDbType.TimestampTz,
+                        ClrTypes = new[] { typeof(ZonedDateTime), typeof(OffsetDateTime), typeof(DateTimeOffset) },
+                        TypeHandlerFactory = new LegacyTimestampTzHandlerFactory()
+                    }.Build());
+            }
+            else
+            {
+                mapper
+                    .AddMapping(new NpgsqlTypeMappingBuilder
+                    {
+                        PgTypeName = "timestamp without time zone",
+                        NpgsqlDbType = NpgsqlDbType.Timestamp,
+                        DbTypes = new[] { DbType.DateTime, DbType.DateTime2 },
+                        ClrTypes = new[] { typeof(LocalDateTime), typeof(DateTime) },
+                        InferredDbType = DbType.DateTime,
+                        TypeHandlerFactory = new TimestampHandlerFactory()
+                    }.Build())
+                    .AddMapping(new NpgsqlTypeMappingBuilder
+                    {
+                        PgTypeName = "timestamp with time zone",
+                        DbTypes = new[] { DbType.DateTimeOffset },
+                        NpgsqlDbType = NpgsqlDbType.TimestampTz,
+                        ClrTypes = new[] { typeof(Instant), typeof(ZonedDateTime), typeof(OffsetDateTime), typeof(DateTimeOffset) },
+                        TypeHandlerFactory = new TimestampTzHandlerFactory()
+                    }.Build());
+            }
+
+            return mapper
                 .AddMapping(new NpgsqlTypeMappingBuilder
                 {
                     PgTypeName = "date",
@@ -78,5 +106,6 @@ namespace Npgsql
                     ClrTypes = new[] { typeof(Period), typeof(Duration), typeof(TimeSpan), typeof(NpgsqlTimeSpan) },
                     TypeHandlerFactory = new IntervalHandlerFactory()
                 }.Build());
+        }
     }
 }

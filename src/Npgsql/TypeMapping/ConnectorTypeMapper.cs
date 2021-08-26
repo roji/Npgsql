@@ -2,7 +2,6 @@
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
@@ -14,6 +13,7 @@ using Npgsql.Internal.TypeHandling;
 using Npgsql.Logging;
 using Npgsql.PostgresTypes;
 using NpgsqlTypes;
+using static Npgsql.Util.Statics;
 
 namespace Npgsql.TypeMapping
 {
@@ -199,6 +199,48 @@ namespace Npgsql.TypeMapping
 
                 _ => throw new ArgumentOutOfRangeException($"Unhandled PostgreSQL type type: {pgType.GetType()}")
             };
+        }
+
+        internal NpgsqlTypeHandler GetByValue(object value)
+        {
+            if (!LegacyTimestampBehavior)
+            {
+                switch (value)
+                {
+                case DateTime dateTime:
+                    return dateTime.Kind == DateTimeKind.Utc
+                        ? GetByNpgsqlDbType(NpgsqlDbType.TimestampTz)
+                        : GetByNpgsqlDbType(NpgsqlDbType.Timestamp);
+                case NpgsqlDateTime npgsqlDateTime:
+                    return npgsqlDateTime.Kind == DateTimeKind.Utc
+                        ? GetByNpgsqlDbType(NpgsqlDbType.TimestampTz)
+                        : GetByNpgsqlDbType(NpgsqlDbType.Timestamp);
+                }
+            }
+
+            return GetByClrType(value.GetType());
+        }
+
+        internal NpgsqlTypeHandler GetByValue<T>(T value)
+        {
+            if (!LegacyTimestampBehavior)
+            {
+                if (typeof(T) == typeof(DateTime))
+                {
+                    return ((DateTime)(object)value!).Kind == DateTimeKind.Utc
+                        ? GetByNpgsqlDbType(NpgsqlDbType.TimestampTz)
+                        : GetByNpgsqlDbType(NpgsqlDbType.Timestamp);
+                }
+
+                if (typeof(T) == typeof(NpgsqlDateTime))
+                {
+                    return ((DateTime)(object)value!).Kind == DateTimeKind.Utc
+                        ? GetByNpgsqlDbType(NpgsqlDbType.TimestampTz)
+                        : GetByNpgsqlDbType(NpgsqlDbType.Timestamp);
+                }
+            }
+
+            return GetByClrType(typeof(T));
         }
 
         internal NpgsqlTypeHandler GetByClrType(Type type)

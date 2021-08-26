@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Data;
-using System.Globalization;
+using System.Threading.Tasks;
 using NodaTime;
 using Npgsql.Tests;
 using NpgsqlTypes;
@@ -9,180 +9,257 @@ using NUnit.Framework;
 // ReSharper disable AccessToModifiedClosure
 // ReSharper disable AccessToDisposedClosure
 
-namespace Npgsql.PluginTests
+namespace Npgsql.NodaTime.Tests
 {
     public class NodaTimeTests : TestBase
     {
         #region Timestamp
 
-        static readonly TestCaseData[] TimestampCases = {
-            new TestCaseData(new LocalDateTime(1998, 4, 12, 13, 26, 38, 789)).SetName(nameof(Timestamp) + "Pre2000"),
-            new TestCaseData(new LocalDateTime(2015, 1, 27, 8, 45, 12, 345)).SetName(nameof(Timestamp) + "Post2000"),
-            new TestCaseData(new LocalDateTime(1999, 12, 31, 23, 59, 59, 999).PlusNanoseconds(456000)).SetName(nameof(Timestamp) + "Microseconds"),
+        static readonly TestCaseData[] TimestampValues =
+        {
+            new TestCaseData(new LocalDateTime(1998, 4, 12, 13, 26, 38, 789), "1998-04-12 13:26:38.789")
+                .SetName("TimestampPre2000"),
+            new TestCaseData(new LocalDateTime(2015, 1, 27, 8, 45, 12, 345), "2015-01-27 08:45:12.345")
+                .SetName("TimestampPost2000"),
+            new TestCaseData(new LocalDateTime(1999, 12, 31, 23, 59, 59, 999).PlusNanoseconds(456000), "1999-12-31 23:59:59.999456")
+                .SetName("TimestampMicroseconds"),
         };
 
-        [Test, TestCaseSource(nameof(TimestampCases))]
-        public void Timestamp(LocalDateTime localDateTime)
+        [Test, TestCaseSource(nameof(TimestampValues))]
+        public async Task Timestamp_read(LocalDateTime localDateTime, string s)
         {
-            using var conn = OpenConnection();
-            var instant = localDateTime.InUtc().ToInstant();
-            var minTimestampPostgres = Instant.FromUtc(-4713, 12, 31, 00, 00, 00);
-            var maxTimestampPostgres = Instant.MaxValue;
-            var dateTime = new DateTime(2020, 03, 04, 12, 20, 44, 0, DateTimeKind.Utc);
+            await using var conn = await OpenConnectionAsync();
+            await using var cmd = new NpgsqlCommand($"SELECT '{s}'::timestamp without time zone", conn);
+            await using var reader = await cmd.ExecuteReaderAsync();
+            await reader.ReadAsync();
 
-            conn.ExecuteNonQuery("CREATE TEMP TABLE data (d1 TIMESTAMP, d2 TIMESTAMP, d3 TIMESTAMP, d4 TIMESTAMP, d5 TIMESTAMP, d6 TIMESTAMP, d7 TIMESTAMP, d8 TIMESTAMP)");
+            Assert.That(reader.GetDataTypeName(0), Is.EqualTo("timestamp without time zone"));
+            Assert.That(reader.GetFieldType(0), Is.EqualTo(typeof(LocalDateTime)));
 
-            using (var cmd = new NpgsqlCommand("INSERT INTO data VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8)", conn))
+            Assert.That(reader[0], Is.EqualTo(localDateTime));
+            Assert.That(reader.GetFieldValue<LocalDateTime>(0), Is.EqualTo(localDateTime));
+            Assert.That(reader.GetDateTime(0), Is.EqualTo(localDateTime.ToDateTimeUnspecified()));
+            Assert.That(reader.GetFieldValue<DateTime>(0), Is.EqualTo(localDateTime.ToDateTimeUnspecified()));
+
+            Assert.That(() => reader.GetFieldValue<Instant>(0), Throws.TypeOf<InvalidCastException>());
+            Assert.That(() => reader.GetFieldValue<ZonedDateTime>(0), Throws.TypeOf<InvalidCastException>());
+            Assert.That(() => reader.GetDate(0), Throws.TypeOf<InvalidCastException>());
+        }
+
+        [Test, TestCaseSource(nameof(TimestampValues))]
+        public async Task Timestamp_write_values(LocalDateTime localDateTime, string expected)
+        {
+            await using var conn = await OpenConnectionAsync();
+            await using var cmd = new NpgsqlCommand("SELECT $1::text", conn)
             {
-                cmd.Parameters.Add(new NpgsqlParameter("p1", NpgsqlDbType.Timestamp) { Value = instant });
-                cmd.Parameters.Add(new NpgsqlParameter("p2", DbType.DateTime) { Value = instant });
-                cmd.Parameters.Add(new NpgsqlParameter("p3", DbType.DateTime2) { Value = instant });
-                cmd.Parameters.Add(new NpgsqlParameter { ParameterName = "p4", Value = instant });
-                cmd.Parameters.Add(new NpgsqlParameter { ParameterName = "p5", Value = localDateTime });
-                cmd.Parameters.Add(new NpgsqlParameter { ParameterName = "p6", Value = minTimestampPostgres });
-                cmd.Parameters.Add(new NpgsqlParameter { ParameterName = "p7", Value = maxTimestampPostgres });
-                cmd.Parameters.Add(new NpgsqlParameter { ParameterName = "p8", Value = dateTime });
-                cmd.ExecuteNonQuery();
-            }
-
-            // Make sure the values inserted are the good ones, textually
-            using (var cmd = new NpgsqlCommand("SELECT d1::TEXT, d2::TEXT, d3::TEXT, d4::TEXT, d5::TEXT FROM data", conn))
-            using (var reader = cmd.ExecuteReader())
-            {
-                reader.Read();
-                for (var i = 0; i < reader.FieldCount; i++)
-                    Assert.That(reader.GetValue(i), Is.EqualTo(instant.ToString("yyyy'-'MM'-'dd' 'HH':'mm':'ss'.'FFFFFF", CultureInfo.InvariantCulture)));
-            }
-
-            using (var cmd = new NpgsqlCommand("SELECT d6::TEXT, d7::TEXT, d8::TEXT FROM data", conn))
-            using (var reader = cmd.ExecuteReader())
-            {
-                reader.Read();
-                Assert.That(reader.GetValue(0), Is.EqualTo("4714-12-31 00:00:00 BC"));
-                Assert.That(reader.GetValue(1), Is.EqualTo(maxTimestampPostgres.ToString("yyyy'-'MM'-'dd' 'HH':'mm':'ss'.'FFFFFF", CultureInfo.InvariantCulture)));
-                Assert.That(reader.GetValue(2), Is.EqualTo("2020-03-04 12:20:44"));
-            }
-
-            using (var cmd = new NpgsqlCommand("SELECT d1, d2, d3, d4, d5 FROM data", conn))
-            using (var reader = cmd.ExecuteReader())
-            {
-                reader.Read();
-
-                for (var i = 0; i < reader.FieldCount; i++)
+                Parameters =
                 {
-                    Assert.That(reader.GetFieldType(i), Is.EqualTo(typeof(Instant)));
-                    Assert.That(reader.GetFieldValue<Instant>(i), Is.EqualTo(instant));
-                    Assert.That(reader.GetValue(i), Is.EqualTo(instant));
-                    Assert.That(reader.GetFieldValue<LocalDateTime>(i), Is.EqualTo(localDateTime));
-                    Assert.That(() => reader.GetFieldValue<ZonedDateTime>(i), Throws.TypeOf<InvalidCastException>());
-                    Assert.That(() => reader.GetDateTime(i), Is.EqualTo(localDateTime.ToDateTimeUnspecified()));
-                    Assert.That(() => reader.GetFieldValue<DateTime>(i), Is.EqualTo(localDateTime.ToDateTimeUnspecified()));
-                    Assert.That(() => reader.GetDate(i), Throws.TypeOf<InvalidCastException>());
+                    new() { Value = localDateTime, NpgsqlDbType = NpgsqlDbType.Timestamp }
                 }
+            };
+
+            Assert.That(await cmd.ExecuteScalarAsync(), Is.EqualTo(expected));
+        }
+
+        static NpgsqlParameter[] TimestampParameters
+        {
+            get
+            {
+                var localDateTime = new LocalDateTime(1998, 4, 12, 13, 26, 38);
+
+                return new NpgsqlParameter[]
+                {
+                    new() { Value = localDateTime },
+                    new() { Value = localDateTime, NpgsqlDbType = NpgsqlDbType.Timestamp },
+                    new() { Value = localDateTime, DbType = DbType.DateTime },
+                    new() { Value = localDateTime, DbType = DbType.DateTime2 },
+                    new() { Value = localDateTime.ToDateTimeUnspecified() },
+                    new() { Value = DateTime.SpecifyKind(localDateTime.ToDateTimeUnspecified(), DateTimeKind.Local) }
+                };
             }
         }
 
-        [Test, Description("Makes sure that when ConvertInfinityDateTime is true, infinity values are properly converted")]
-        public void TimestampConvertInfinity()
+        [Test, TestCaseSource(nameof(TimestampParameters))]
+        public async Task Timestamp_resolution(NpgsqlParameter parameter)
         {
-            var csb = new NpgsqlConnectionStringBuilder(ConnectionString) { ConvertInfinityDateTime = true };
-            using var conn = OpenConnection(csb);
-            conn.ExecuteNonQuery("CREATE TEMP TABLE data (d1 TIMESTAMP, d2 TIMESTAMP, d3 TIMESTAMP, d4 TIMESTAMP)");
+            await using var conn = await OpenConnectionAsync();
+            conn.TypeMapper.Reset();
+            conn.TypeMapper.UseNodaTime();
 
-            using (var cmd = new NpgsqlCommand("INSERT INTO data VALUES (@p1, @p2, @p3, @p4)", conn))
+            await using var cmd = new NpgsqlCommand("SELECT pg_typeof($1)::text, $1::text", conn)
             {
-                cmd.Parameters.AddWithValue("p1", NpgsqlDbType.Timestamp, Instant.MaxValue);
-                cmd.Parameters.AddWithValue("p2", NpgsqlDbType.Timestamp, Instant.MinValue);
-                cmd.Parameters.AddWithValue("p3", NpgsqlDbType.Timestamp, DateTime.MaxValue);
-                cmd.Parameters.AddWithValue("p4", NpgsqlDbType.Timestamp, DateTime.MinValue);
-                cmd.ExecuteNonQuery();
-            }
+                Parameters = { parameter }
+            };
 
-            using (var cmd = new NpgsqlCommand("SELECT d1::TEXT, d2::TEXT, d3::TEXT, d4::TEXT FROM data", conn))
-            using (var reader = cmd.ExecuteReader())
-            {
-                reader.Read();
-                Assert.That(reader.GetValue(0), Is.EqualTo("infinity"));
-                Assert.That(reader.GetValue(1), Is.EqualTo("-infinity"));
-                Assert.That(reader.GetValue(2), Is.EqualTo("infinity"));
-                Assert.That(reader.GetValue(3), Is.EqualTo("-infinity"));
-            }
+            await using var reader = await cmd.ExecuteReaderAsync();
+            await reader.ReadAsync();
+            Assert.That(reader[0], Is.EqualTo("timestamp without time zone"));
+            Assert.That(reader[1], Is.EqualTo("1998-04-12 13:26:38"));
+        }
 
-            using (var cmd = new NpgsqlCommand("SELECT * FROM data", conn))
-            using (var reader = cmd.ExecuteReader())
+        static NpgsqlParameter[] TimestampInvalidParameters
+            => new NpgsqlParameter[]
             {
-                reader.Read();
-                Assert.That(reader.GetFieldValue<Instant>(0), Is.EqualTo(Instant.MaxValue));
-                Assert.That(reader.GetFieldValue<Instant>(1), Is.EqualTo(Instant.MinValue));
-                Assert.That(reader.GetFieldValue<DateTime>(2), Is.EqualTo(DateTime.MaxValue));
-                Assert.That(reader.GetFieldValue<DateTime>(3), Is.EqualTo(DateTime.MinValue));
-            }
+                new() { Value = new LocalDateTime().InUtc().ToInstant(), NpgsqlDbType = NpgsqlDbType.Timestamp },
+                new() { Value = new DateTimeOffset(), NpgsqlDbType = NpgsqlDbType.Timestamp },
+                new() { Value = DateTime.UtcNow, NpgsqlDbType = NpgsqlDbType.Timestamp }
+            };
+
+        [Test, TestCaseSource(nameof(TimestampInvalidParameters))]
+        public async Task Timestamp_resolution_failure(NpgsqlParameter parameter)
+        {
+            await using var conn = await OpenConnectionAsync();
+            await using var cmd = new NpgsqlCommand("SELECT $1::text", conn)
+            {
+                Parameters = { parameter }
+            };
+
+            Assert.That(() => cmd.ExecuteReaderAsync(), Throws.Exception.TypeOf<InvalidCastException>());
         }
 
         #endregion Timestamp
 
         #region Timestamp with time zone
 
-        [Test]
-        public void TimestampTz()
+        [Test, TestCaseSource(nameof(TimestampValues))]
+        public async Task Timestamptz_read(LocalDateTime expectedLocalDateTime, string s)
         {
-            using var conn = OpenConnection();
-            var timezone = "America/New_York";
-            conn.ExecuteNonQuery($"SET TIMEZONE TO '{timezone}'");
-            Assert.That(conn.Timezone, Is.EqualTo(timezone));
-            // Nodatime provider should return timestamptz's as ZonedDateTime in the session timezone
+            var expectedInstance = expectedLocalDateTime.InUtc().ToInstant();
 
-            var instant = Instant.FromUtc(2015, 6, 27, 8, 45, 12) + Duration.FromMilliseconds(345);
-            var utcZonedDateTime = instant.InUtc();
-            var localZonedDateTime = utcZonedDateTime.WithZone(DateTimeZoneProviders.Tzdb[timezone]);
-            var offsetDateTime = localZonedDateTime.ToOffsetDateTime();
-            var dateTimeOffset = offsetDateTime.ToDateTimeOffset();
-            var dateTime = dateTimeOffset.DateTime;
-            var localDateTime = dateTimeOffset.LocalDateTime;
+            await using var conn = await OpenConnectionAsync();
+            await using var cmd = new NpgsqlCommand($"SELECT '{s}+00'::timestamp with time zone", conn);
+            await using var reader = await cmd.ExecuteReaderAsync();
+            await reader.ReadAsync();
 
-            conn.ExecuteNonQuery("CREATE TEMP TABLE data (d1 TIMESTAMPTZ, d2 TIMESTAMPTZ, d3 TIMESTAMPTZ, d4 TIMESTAMPTZ, d5 TIMESTAMPTZ, d6 TIMESTAMPTZ)");
+            Assert.That(reader.GetDataTypeName(0), Is.EqualTo("timestamp with time zone"));
+            Assert.That(reader.GetFieldType(0), Is.EqualTo(typeof(Instant)));
 
-            using (var cmd = new NpgsqlCommand("INSERT INTO data VALUES (@p1, @p2, @p3, @p4, @p5, @p6)", conn))
+            Assert.That(reader[0], Is.EqualTo(expectedInstance));
+            Assert.That(reader.GetFieldValue<Instant>(0), Is.EqualTo(expectedInstance));
+            Assert.That(reader.GetFieldValue<ZonedDateTime>(0), Is.EqualTo(expectedInstance.InUtc()));
+            Assert.That(reader.GetFieldValue<OffsetDateTime>(0), Is.EqualTo(expectedInstance.WithOffset(Offset.Zero)));
+            Assert.That(reader.GetFieldValue<DateTime>(0), Is.EqualTo(expectedInstance.ToDateTimeUtc()));
+            Assert.That(reader.GetFieldValue<DateTimeOffset>(0), Is.EqualTo(expectedInstance.ToDateTimeOffset()));
+
+            Assert.That(() => reader.GetFieldValue<LocalDateTime>(0), Throws.TypeOf<InvalidCastException>());
+            Assert.That(() => reader.GetDate(0), Throws.TypeOf<InvalidCastException>());
+        }
+
+        [Test, TestCaseSource(nameof(TimestampValues))]
+        public async Task Timestamptz_write_values(LocalDateTime localDateTime, string expected)
+        {
+            await using var conn = await OpenConnectionAsync();
+            await conn.ExecuteNonQueryAsync("SET TimeZone='UTC'");
+            await using var cmd = new NpgsqlCommand("SELECT $1::text", conn)
             {
-                cmd.Parameters.Add(new NpgsqlParameter("p1", NpgsqlDbType.TimestampTz) { Value = instant });
-                cmd.Parameters.Add(new NpgsqlParameter { ParameterName = "p2", Value = utcZonedDateTime });
-                cmd.Parameters.Add(new NpgsqlParameter { ParameterName = "p3", Value = localZonedDateTime });
-                cmd.Parameters.Add(new NpgsqlParameter { ParameterName = "p4", Value = offsetDateTime });
-                cmd.Parameters.Add(new NpgsqlParameter { ParameterName = "p5", Value = dateTimeOffset });
-                cmd.Parameters.Add(new NpgsqlParameter { ParameterName = "p6", Value = dateTime });
-                cmd.ExecuteNonQuery();
-            }
+                Parameters = { new() { Value = localDateTime.InUtc().ToInstant(), NpgsqlDbType = NpgsqlDbType.TimestampTz} }
+            };
 
-            using (var cmd = new NpgsqlCommand("SELECT d1::TEXT, d2::TEXT, d3::TEXT, d4::TEXT, d5::TEXT, d6::TEXT FROM data", conn))
-            using (var reader = cmd.ExecuteReader())
+            Assert.That(await cmd.ExecuteScalarAsync(), Is.EqualTo(expected + "+00"));
+        }
+
+        static NpgsqlParameter[] TimestamptzParameters
+        {
+            get
             {
-                reader.Read();
-                // When converting timestamptz as a string as we're doing here, PostgreSQL automatically converts
-                // it to the session timezone
-                for (var i = 0; i < reader.FieldCount; i++)
-                    Assert.That(reader.GetValue(i), Is.EqualTo(
-                        localZonedDateTime.ToString("uuuu'-'MM'-'dd' 'HH':'mm':'ss'.'fff", CultureInfo.InvariantCulture) + "-04")
-                    );
-            }
+                var localDateTime = new LocalDateTime(1998, 4, 12, 13, 26, 38);
+                var instance = localDateTime.InUtc().ToInstant();
 
-            using (var cmd = new NpgsqlCommand("SELECT * FROM data", conn))
-            using (var reader = cmd.ExecuteReader())
-            {
-                reader.Read();
-
-                for (var i = 0; i < reader.FieldCount; i++)
+                return new NpgsqlParameter[]
                 {
-                    Assert.That(reader.GetFieldType(i), Is.EqualTo(typeof(Instant)));
-                    Assert.That(reader.GetFieldValue<Instant>(i), Is.EqualTo(instant));
-                    Assert.That(reader.GetValue(i), Is.EqualTo(instant));
-                    Assert.That(reader.GetFieldValue<ZonedDateTime>(i), Is.EqualTo(localZonedDateTime));
-                    Assert.That(reader.GetFieldValue<OffsetDateTime>(i), Is.EqualTo(offsetDateTime));
-                    Assert.That(reader.GetFieldValue<DateTimeOffset>(i), Is.EqualTo(dateTimeOffset));
-                    Assert.That(() => reader.GetFieldValue<LocalDateTime>(i), Throws.TypeOf<InvalidCastException>());
-                    Assert.That(() => reader.GetDateTime(i), Is.EqualTo(localDateTime));
-                    Assert.That(() => reader.GetDate(i), Throws.TypeOf<InvalidCastException>());
-                }
+                    new() { Value = instance },
+                    new() { Value = instance, NpgsqlDbType = NpgsqlDbType.TimestampTz },
+                    new() { Value = instance, DbType = DbType.DateTimeOffset },
+                    new() { Value = instance.InUtc() },
+                    new() { Value = instance.WithOffset(Offset.Zero) },
+                    new() { Value = instance.InUtc().ToDateTimeUtc() },
+                    new() { Value = instance.ToDateTimeOffset() }
+                };
             }
+        }
+
+        [Test, TestCaseSource(nameof(TimestamptzParameters))]
+        public async Task Timestamptz_resolution(NpgsqlParameter parameter)
+        {
+            await using var conn = await OpenConnectionAsync();
+            await conn.ExecuteNonQueryAsync("SET TimeZone='UTC'");
+            conn.TypeMapper.Reset();
+            conn.TypeMapper.UseNodaTime();
+
+            await using var cmd = new NpgsqlCommand("SELECT pg_typeof($1)::text, $1::text", conn)
+            {
+                Parameters = { parameter }
+            };
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+            await reader.ReadAsync();
+            Assert.That(reader[0], Is.EqualTo("timestamp with time zone"));
+            Assert.That(reader[1], Is.EqualTo("1998-04-12 13:26:38+00"));
+        }
+
+        static NpgsqlParameter[] TimestamptzInvalidParameters
+            => new NpgsqlParameter[]
+            {
+                new() { Value = new LocalDateTime(), NpgsqlDbType = NpgsqlDbType.TimestampTz },
+                new() { Value = DateTime.Now, NpgsqlDbType = NpgsqlDbType.TimestampTz },
+                new() { Value = DateTime.SpecifyKind(DateTime.Now, DateTimeKind.Unspecified), NpgsqlDbType = NpgsqlDbType.TimestampTz },
+                new() { Value = new DateTimeOffset(DateTime.SpecifyKind(DateTime.Now, DateTimeKind.Unspecified), TimeSpan.FromHours(2)), NpgsqlDbType = NpgsqlDbType.TimestampTz },
+
+                // We only support ZonedDateTime and OffsetDateTime in UTC
+                new() { Value = new LocalDateTime().InUtc().ToInstant().InZone(DateTimeZoneProviders.Tzdb["America/New_York"]), NpgsqlDbType = NpgsqlDbType.TimestampTz },
+                new() { Value = new LocalDateTime().WithOffset(Offset.FromHours(1)), NpgsqlDbType = NpgsqlDbType.TimestampTz }
+            };
+
+        [Test, TestCaseSource(nameof(TimestamptzInvalidParameters))]
+        public async Task Timestamptz_resolution_failure(NpgsqlParameter parameter)
+        {
+            await using var conn = await OpenConnectionAsync();
+            await using var cmd = new NpgsqlCommand("SELECT $1::text", conn)
+            {
+                Parameters = { parameter }
+            };
+
+            Assert.That(() => cmd.ExecuteReaderAsync(), Throws.Exception.TypeOf<InvalidCastException>());
+        }
+
+        [Test]
+        public async Task Timestamptz_read_infinity()
+        {
+            var connectionString = new NpgsqlConnectionStringBuilder(ConnectionString) { ConvertInfinityDateTime = true }.ConnectionString;
+            await using var conn = await OpenConnectionAsync(connectionString);
+            await using var cmd =
+                new NpgsqlCommand("SELECT 'infinity'::timestamp with time zone, '-infinity'::timestamp with time zone", conn);
+            await using var reader = await cmd.ExecuteReaderAsync();
+            await reader.ReadAsync();
+
+            Assert.That(reader.GetFieldValue<Instant>(0), Is.EqualTo(Instant.MaxValue));
+            Assert.That(reader.GetFieldValue<DateTime>(0), Is.EqualTo(DateTime.MaxValue));
+            Assert.That(reader.GetFieldValue<Instant>(1), Is.EqualTo(Instant.MinValue));
+            Assert.That(reader.GetFieldValue<DateTime>(1), Is.EqualTo(DateTime.MinValue));
+        }
+
+        [Test]
+        public async Task Timestamptz_write_infinity()
+        {
+            var connectionString = new NpgsqlConnectionStringBuilder(ConnectionString) { ConvertInfinityDateTime = true }.ConnectionString;
+            await using var conn = await OpenConnectionAsync(connectionString);
+            await using var cmd = new NpgsqlCommand("SELECT $1::text, $2::text, $3::text, $4::text", conn)
+            {
+                Parameters =
+                {
+                    new() { Value = Instant.MaxValue },
+                    new() { Value = DateTime.MaxValue },
+                    new() { Value = Instant.MinValue },
+                    new() { Value = DateTime.MinValue }
+                }
+            };
+            await using var reader = await cmd.ExecuteReaderAsync();
+            await reader.ReadAsync();
+
+            Assert.That(reader[0], Is.EqualTo("infinity"));
+            Assert.That(reader[1], Is.EqualTo("infinity"));
+            Assert.That(reader[2], Is.EqualTo("-infinity"));
+            Assert.That(reader[3], Is.EqualTo("-infinity"));
         }
 
         #endregion Timestamp with time zone
@@ -507,10 +584,10 @@ namespace Npgsql.PluginTests
 
         #region Support
 
-        protected override NpgsqlConnection OpenConnection(string? connectionString = null)
+        protected override async ValueTask<NpgsqlConnection> OpenConnectionAsync(string? connectionString = null)
         {
             var conn = new NpgsqlConnection(connectionString ?? ConnectionString);
-            conn.Open();
+            await conn.OpenAsync();
             conn.TypeMapper.UseNodaTime();
             return conn;
         }
