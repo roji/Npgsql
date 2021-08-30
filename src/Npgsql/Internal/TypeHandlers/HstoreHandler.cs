@@ -28,7 +28,7 @@ namespace Npgsql.Internal.TypeHandlers
     {
         /// <inheritdoc />
         public override NpgsqlTypeHandler<Dictionary<string, string?>> Create(PostgresType postgresType, NpgsqlConnector conn)
-            => new HstoreHandler(postgresType, conn);
+            => new HstoreHandler(postgresType, new TextHandler(postgresType, conn));
     }
 
     /// <summary>
@@ -55,10 +55,10 @@ namespace Npgsql.Internal.TypeHandlers
         /// </summary>
         readonly TextHandler _textHandler;
 
-        internal HstoreHandler(PostgresType postgresType, NpgsqlConnector connector)
+        internal HstoreHandler(PostgresType postgresType, TextHandler textHandler)
         {
             PostgresType = postgresType;
-            _textHandler = new TextHandler(postgresType, connector);
+            _textHandler = textHandler;
         }
 
         #region Write

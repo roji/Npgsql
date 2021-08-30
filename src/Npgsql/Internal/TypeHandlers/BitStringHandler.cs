@@ -27,6 +27,10 @@ namespace Npgsql.Internal.TypeHandlers
     public partial class BitStringHandler : NpgsqlTypeHandler<BitArray>,
         INpgsqlTypeHandler<BitVector32>, INpgsqlTypeHandler<bool>, INpgsqlTypeHandler<string>
     {
+        public BitStringHandler() {} // TODO: Remove
+
+        public BitStringHandler(PostgresType pgType) : base(pgType) {}
+
         internal override Type GetFieldType(FieldDescription? fieldDescription = null)
             => fieldDescription != null && fieldDescription.TypeModifier == 1 ? typeof(bool) : typeof(BitArray);
 

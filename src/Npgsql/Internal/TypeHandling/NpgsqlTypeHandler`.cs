@@ -22,6 +22,11 @@ namespace Npgsql.Internal.TypeHandling
     /// </typeparam>
     public abstract class NpgsqlTypeHandler<TDefault> : NpgsqlTypeHandler, INpgsqlTypeHandler<TDefault>
     {
+        // TODO: Not sure if this should actually stay - always require postgresType?
+        protected NpgsqlTypeHandler() {}
+
+        protected NpgsqlTypeHandler(PostgresType postgresType) : base(postgresType) {}
+
         #region Read
 
         /// <summary>

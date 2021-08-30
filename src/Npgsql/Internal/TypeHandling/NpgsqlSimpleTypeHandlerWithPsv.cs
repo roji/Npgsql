@@ -23,6 +23,10 @@ namespace Npgsql.Internal.TypeHandling
     /// <typeparam name="TPsv">The provider-specific CLR type that this handler will read and write.</typeparam>
     public abstract class NpgsqlSimpleTypeHandlerWithPsv<TDefault, TPsv> : NpgsqlSimpleTypeHandler<TDefault>, INpgsqlSimpleTypeHandler<TPsv>
     {
+        public NpgsqlSimpleTypeHandlerWithPsv() {} // TODO: Remove
+
+        public NpgsqlSimpleTypeHandlerWithPsv(PostgresType pgType) : base(pgType) {}
+
         #region Read
 
         /// <summary>

@@ -493,11 +493,11 @@ namespace Npgsql
                 return;
 
             if (_npgsqlDbType.HasValue)
-                Handler = typeMapper.GetByNpgsqlDbType(_npgsqlDbType.Value);
+                Handler = typeMapper.ResolveNpgsqlDbType(_npgsqlDbType.Value);
             else if (_dataTypeName != null)
-                Handler = typeMapper.GetByDataTypeName(_dataTypeName);
+                Handler = typeMapper.ResolveDataTypeName(_dataTypeName);
             else if (_value != null)
-                Handler = typeMapper.GetByClrType(_value.GetType());
+                Handler = typeMapper.ResolveClrType(_value.GetType());
             else
                 throw new InvalidOperationException($"Parameter '{ParameterName}' must have its value set");
         }

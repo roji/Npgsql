@@ -39,18 +39,13 @@ namespace Npgsql.TypeMapping
             if (pgName != null && pgName.Trim() == "")
                 throw new ArgumentException("pgName can't be empty", nameof(pgName));
 
-            if (nameTranslator == null)
-                nameTranslator = DefaultNameTranslator;
-            if (pgName == null)
-                pgName = GetPgName(typeof(TEnum), nameTranslator);
+            nameTranslator ??= DefaultNameTranslator;
 
-            return AddMapping(new NpgsqlTypeMappingBuilder
-            {
-                PgTypeName = pgName,
-                ClrTypes = new[] { typeof(TEnum) },
-                TypeHandlerFactory = new EnumTypeHandlerFactory<TEnum>(nameTranslator)
-            }.Build());
+            return DoMapEnum<TEnum>(pgName ?? GetPgName(typeof(TEnum), nameTranslator), nameTranslator);
         }
+
+        protected abstract INpgsqlTypeMapper DoMapEnum<TEnum>(string pgName, INpgsqlNameTranslator nameTranslator)
+            where TEnum : struct, Enum;
 
         public bool UnmapEnum<TEnum>(string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
             where TEnum : struct, Enum
@@ -58,13 +53,13 @@ namespace Npgsql.TypeMapping
             if (pgName != null && pgName.Trim() == "")
                 throw new ArgumentException("pgName can't be empty", nameof(pgName));
 
-            if (nameTranslator == null)
-                nameTranslator = DefaultNameTranslator;
-            if (pgName == null)
-                pgName = GetPgName(typeof(TEnum), nameTranslator);
+            nameTranslator ??= DefaultNameTranslator;
 
-            return RemoveMapping(pgName);
+            return DoUnmapEnum<TEnum>(pgName ?? GetPgName(typeof(TEnum), nameTranslator), nameTranslator);
         }
+
+        protected abstract bool DoUnmapEnum<TEnum>(string pgName, INpgsqlNameTranslator nameTranslator)
+            where TEnum : struct, Enum;
 
         #endregion Enum mapping
 
@@ -117,8 +112,6 @@ namespace Npgsql.TypeMapping
 
         #region Misc
 
-        // TODO: why does ReSharper think `GetCustomAttribute<T>` is non-nullable?
-        // ReSharper disable once ConstantConditionalAccessQualifier ConstantNullCoalescingCondition
         private protected static string GetPgName(Type clrType, INpgsqlNameTranslator nameTranslator)
             => clrType.GetCustomAttribute<PgNameAttribute>()?.PgName
                ?? nameTranslator.TranslateTypeName(clrType.Name);

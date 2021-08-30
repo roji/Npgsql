@@ -22,7 +22,7 @@ namespace Npgsql.Internal.TypeHandlers
 
         Type? _resolvedType;
 
-        internal UnmappedEnumHandler(PostgresType pgType, INpgsqlNameTranslator nameTranslator, NpgsqlConnector connector)
+        internal UnmappedEnumHandler(PostgresEnumType pgType, INpgsqlNameTranslator nameTranslator, NpgsqlConnector connector)
             : base(pgType, connector)
         {
             _nameTranslator = nameTranslator;
@@ -141,16 +141,16 @@ namespace Npgsql.Internal.TypeHandlers
         #endregion
     }
 
-    class UnmappedEnumTypeHandlerFactory : NpgsqlTypeHandlerFactory<string>, IEnumTypeHandlerFactory
-    {
-        internal UnmappedEnumTypeHandlerFactory(INpgsqlNameTranslator nameTranslator)
-        {
-            NameTranslator = nameTranslator;
-        }
-
-        public override NpgsqlTypeHandler<string> Create(PostgresType pgType, NpgsqlConnector conn)
-            => new UnmappedEnumHandler(pgType, NameTranslator, conn);
-
-        public INpgsqlNameTranslator NameTranslator { get; }
-    }
+    // class UnmappedEnumTypeHandlerFactory : NpgsqlTypeHandlerFactory<string>, IEnumTypeHandlerFactory
+    // {
+    //     internal UnmappedEnumTypeHandlerFactory(INpgsqlNameTranslator nameTranslator)
+    //     {
+    //         NameTranslator = nameTranslator;
+    //     }
+    //
+    //     public override NpgsqlTypeHandler<string> Create(PostgresType pgType, NpgsqlConnector conn)
+    //         => new UnmappedEnumHandler(pgType, NameTranslator, conn);
+    //
+    //     public INpgsqlNameTranslator NameTranslator { get; }
+    // }
 }

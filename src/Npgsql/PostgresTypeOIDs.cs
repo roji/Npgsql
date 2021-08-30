@@ -3,16 +3,26 @@ namespace Npgsql
     /// <summary>
     /// Holds well-known, built-in PostgreSQL type OIDs.
     /// </summary>
+    /// <remarks>
+    /// Source: <see href="https://github.com/postgres/postgres/blob/master/src/include/catalog/pg_type.dat" />
+    /// </remarks>
     static class PostgresTypeOIDs
     {
         // Numeric
-        internal const uint Int8        = 20;
-        internal const uint Float8      = 701;
-        internal const uint Int4        = 23;
-        internal const uint Numeric     = 1700;
-        internal const uint Float4      = 700;
-        internal const uint Int2        = 21;
-        internal const uint Money       = 790;
+        internal const uint Int8         = 20;
+        internal const uint Int8Array    = 1016;
+        internal const uint Float8       = 701;
+        internal const uint Float8Array  = 1022;
+        internal const uint Int4         = 23;
+        internal const uint Int4Array    = 1007;
+        internal const uint Numeric      = 1700;
+        internal const uint NumericArray = 1231;
+        internal const uint Float4       = 700;
+        internal const uint Float4Array  = 1021;
+        internal const uint Int2         = 21;
+        internal const uint Int2Array    = 1005;
+        internal const uint Money        = 790;
+        internal const uint MoneyArray   = 791;
 
         // Boolean
         internal const uint Bool        = 16;
@@ -83,6 +93,8 @@ namespace Npgsql
         internal const uint Tid         = 27;
 
         // Special
+        internal const uint Record      = 2249;
+        internal const uint Void        = 2278;
         internal const uint Unknown     = 705;
     }
 }

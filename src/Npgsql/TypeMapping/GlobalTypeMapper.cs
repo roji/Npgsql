@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Collections.Specialized;
 using System.Data;
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Net;
@@ -31,6 +30,9 @@ namespace Npgsql.TypeMapping
     {
         public static GlobalTypeMapper Instance { get; }
 
+        internal List<ITypeHandlerResolverFactory> ResolverFactories { get; } = new();
+        internal Dictionary<string, IUserEnumTypeMapping> UserEnumTypeMappings { get; } = new();
+
         internal ImmutableDictionary<string, NpgsqlTypeMapping> MappingsByName { get; private set; }
         internal ImmutableDictionary<NpgsqlDbType, NpgsqlTypeMapping> MappingsByNpgsqlDbType { get; private set; }
         internal ImmutableDictionary<Type, NpgsqlTypeMapping> MappingsByClrType { get; private set; }
@@ -53,6 +55,34 @@ namespace Npgsql.TypeMapping
             => Reset();
 
         #region Mapping management
+
+        protected override INpgsqlTypeMapper DoMapEnum<TEnum>(string pgName, INpgsqlNameTranslator nameTranslator)
+        {
+            Lock.EnterWriteLock();
+            try
+            {
+                UserEnumTypeMappings[pgName] = new UserEnumTypeMapping<TEnum>(pgName, nameTranslator);
+
+                return this;
+            }
+            finally
+            {
+                Lock.ExitWriteLock();
+            }
+        }
+
+        protected override bool DoUnmapEnum<TEnum>(string pgName, INpgsqlNameTranslator nameTranslator)
+        {
+            Lock.EnterWriteLock();
+            try
+            {
+                return UserEnumTypeMappings.Remove(pgName);
+            }
+            finally
+            {
+                Lock.ExitWriteLock();
+            }
+        }
 
         public override INpgsqlTypeMapper AddMapping(NpgsqlTypeMapping mapping)
         {
@@ -158,7 +188,12 @@ namespace Npgsql.TypeMapping
             Lock.EnterWriteLock();
             try
             {
+                ResolverFactories.Clear();
+                ResolverFactories.Add(new BuiltInTypeHandlerResolverFactory());
+
+                // TODO: Remove
                 SetupBuiltInHandlers();
+
                 RecordChange();
             }
             finally

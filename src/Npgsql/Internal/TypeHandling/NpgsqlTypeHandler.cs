@@ -18,6 +18,12 @@ namespace Npgsql.Internal.TypeHandling
     /// </summary>
     public abstract class NpgsqlTypeHandler
     {
+        // TODO: Not sure if this should actually stay - always require postgresType?
+        protected NpgsqlTypeHandler() {}
+
+        protected NpgsqlTypeHandler(PostgresType postgresType)
+            => PostgresType = postgresType;
+
         // TODO: Make this required in C# 10
         /// <summary>
         /// The PostgreSQL type handled by this type handler.

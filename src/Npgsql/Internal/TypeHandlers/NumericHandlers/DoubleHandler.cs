@@ -1,5 +1,6 @@
 ﻿using Npgsql.BackendMessages;
 using Npgsql.Internal.TypeHandling;
+using Npgsql.PostgresTypes;
 
 namespace Npgsql.Internal.TypeHandlers.NumericHandlers
 {
@@ -15,6 +16,10 @@ namespace Npgsql.Internal.TypeHandlers.NumericHandlers
     /// </remarks>
     public partial class DoubleHandler : NpgsqlSimpleTypeHandler<double>
     {
+        public DoubleHandler() {} // TODO: Remove
+
+        public DoubleHandler(PostgresType pgType) : base(pgType) {}
+
         /// <inheritdoc />
         public override double Read(NpgsqlReadBuffer buf, int len, FieldDescription? fieldDescription = null)
             => buf.ReadDouble();

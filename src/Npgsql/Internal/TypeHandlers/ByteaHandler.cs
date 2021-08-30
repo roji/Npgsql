@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Npgsql.BackendMessages;
 using Npgsql.Internal.TypeHandling;
+using Npgsql.PostgresTypes;
 
 namespace Npgsql.Internal.TypeHandlers
 {
@@ -21,6 +22,10 @@ namespace Npgsql.Internal.TypeHandlers
         , INpgsqlTypeHandler<ReadOnlyMemory<byte>>, INpgsqlTypeHandler<Memory<byte>>
 #endif
     {
+        public ByteaHandler() {} // TODO: Remove
+
+        public ByteaHandler(PostgresType pgType) : base(pgType) {}
+
         /// <inheritdoc />
         public override async ValueTask<byte[]> Read(NpgsqlReadBuffer buf, int len, bool async, FieldDescription? fieldDescription = null)
         {
