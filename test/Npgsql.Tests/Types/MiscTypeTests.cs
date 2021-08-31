@@ -223,23 +223,6 @@ namespace Npgsql.Tests.Types
 
         #region Unrecognized types
 
-        [Test, Description("Attempts to retrieve an unrecognized type without marking it as unknown, triggering an exception")]
-        public async Task UnrecognizedBinary()
-        {
-            if (IsMultiplexing)
-                return;
-
-            using var conn = await OpenConnectionAsync();
-            conn.TypeMapper.RemoveMapping("boolean");
-            using (var cmd = new NpgsqlCommand("SELECT TRUE", conn))
-            using (var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SequentialAccess))
-            {
-                reader.Read();
-                Assert.That(() => reader.GetValue(0), Throws.Exception.TypeOf<NotSupportedException>());
-            }
-            Assert.That(await conn.ExecuteScalarAsync("SELECT 1"), Is.EqualTo(1));
-        }
-
         [Test, Description("Retrieves a type as an unknown type, i.e. untreated string")]
         public async Task AllResultTypesAreUnknown()
         {

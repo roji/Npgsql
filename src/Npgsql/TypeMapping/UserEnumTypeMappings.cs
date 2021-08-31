@@ -9,16 +9,6 @@ using NpgsqlTypes;
 
 namespace Npgsql.TypeMapping
 {
-    // abstract class UserTypeMapping<T>
-    // {
-    //     protected UserTypeMapping(string pgTypeName, INpgsqlNameTranslator nameTranslator)
-    //         => (PgTypeName, NameTranslator) = (pgTypeName, nameTranslator);
-    //
-    //     public INpgsqlNameTranslator NameTranslator { get; }
-    //     public string PgTypeName { get; }
-    //     public Type ClrType => typeof(T);
-    // }
-
     interface IUserEnumTypeMapping
     {
         public string PgTypeName { get; }
@@ -56,12 +46,4 @@ namespace Npgsql.TypeMapping
         public NpgsqlTypeHandler CreateHandler(PostgresEnumType postgresType)
             => new EnumHandler<TEnum>(postgresType, _enumToLabel, _labelToEnum);
     }
-
-    // class UserCompositeTypeMapping : UserTypeMapping
-    // {
-    //     public UserCompositeTypeMapping(string pgTypeName, Type clrType, INpgsqlNameTranslator nameTranslator)
-    //         : base(pgTypeName, clrType, nameTranslator)
-    //     {
-    //     }
-    // }
 }

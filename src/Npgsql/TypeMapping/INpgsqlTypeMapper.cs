@@ -164,6 +164,13 @@ namespace Npgsql.TypeMapping
             INpgsqlNameTranslator? nameTranslator = null);
 
         /// <summary>
+        /// Adds a type resolver factory, which produces resolvers that can add or modify support for PostgreSQL types.
+        /// Typically used by plugins.
+        /// </summary>
+        /// <param name="resolverFactory">The type resolver factory to be added.</param>
+        void AddTypeResolverFactory(ITypeHandlerResolverFactory resolverFactory);
+
+        /// <summary>
         /// Resets all mapping changes performed on this type mapper and reverts it to its original, starting state.
         /// </summary>
         void Reset();

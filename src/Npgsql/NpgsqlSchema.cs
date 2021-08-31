@@ -541,7 +541,9 @@ FROM pg_constraint c
             {
                 if (!connector.TypeMapper.MappingsByName.TryGetValue(baseType.Name, out var mapping) &&
                     !connector.TypeMapper.MappingsByName.TryGetValue(baseType.FullName, out mapping))
+                {
                     continue;
+                }
 
                 var row = table.Rows.Add();
 

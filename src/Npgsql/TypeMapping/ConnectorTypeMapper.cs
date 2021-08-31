@@ -25,7 +25,11 @@ namespace Npgsql.TypeMapping
         internal NpgsqlDatabaseInfo DatabaseInfo
         {
             get => _databaseInfo ?? throw new InvalidOperationException("Internal error: this type mapper hasn't yet been bound to a database info object");
-            set => _databaseInfo = value;
+            set
+            {
+                _databaseInfo = value;
+                Reset();
+            }
         }
 
         internal ITypeHandlerResolver[] _resolvers;
@@ -54,7 +58,12 @@ namespace Npgsql.TypeMapping
         {
             _connector = connector;
             UnrecognizedTypeHandler = new UnknownTypeHandler(_connector);
-            Reset();
+            _resolvers = Array.Empty<ITypeHandlerResolver>();
+
+            // TODO: Remove
+            MappingsByName = null!;
+            MappingsByNpgsqlDbType = null!;
+            MappingsByClrType = null!;
         }
 
         #endregion Constructors
@@ -77,7 +86,7 @@ namespace Npgsql.TypeMapping
         internal bool TryResolveOID(uint oid, [NotNullWhen(true)] out NpgsqlTypeHandler? handler)
         {
             foreach (var resolver in _resolvers)
-                if (resolver.ResolveOID(oid, out handler))
+                if ((handler = resolver.ResolveOID(oid)) is not null)
                     return true;
 
             if (_extraHandlersByOID.TryGetValue(oid, out handler))
@@ -304,19 +313,22 @@ namespace Npgsql.TypeMapping
                 return _extraHandlersByDataTypeName[typeName] =
                     elementHandler.CreateArrayHandler(pgArrayType, _connector.Settings.ArrayNullabilityMode);
             }
+
             case PostgresRangeType pgRangeType:
             {
                 var subtypeHandler = ResolveOID(pgRangeType.Subtype.OID);
                 return _extraHandlersByDataTypeName[typeName] = (NpgsqlTypeHandler)subtypeHandler.CreateRangeHandler(pgRangeType);
             }
+
             case PostgresMultirangeType pgMultirangeType:
             {
                 var subtypeHandler = ResolveOID(pgMultirangeType.Subrange.Subtype.OID);
                 return _extraHandlersByDataTypeName[typeName] = (NpgsqlTypeHandler)subtypeHandler.CreateMultirangeHandler(pgMultirangeType);
             }
+
             case PostgresEnumType pgEnumType:
             {
-                // A mapped enum would have been registered in InternalMappings and bound above - this is unmapped.
+                // A mapped enum would have been registered in _extraHandlersByDataTypeName and bound above - this is unmapped.
                 return _extraHandlersByDataTypeName[typeName] = new UnmappedEnumHandler(pgEnumType, DefaultNameTranslator, _connector);
             }
 
@@ -324,20 +336,15 @@ namespace Npgsql.TypeMapping
                 return _extraHandlersByDataTypeName[typeName] = ResolveOID(pgDomainType.BaseType.OID);
 
             case PostgresBaseType pgBaseType:
-                throw new NotSupportedException($"Could not find PostgreSQL type '{pgBaseType}'");
+                throw new NotSupportedException($"PostgreSQL type '{pgBaseType}' isn't supported by Npgsql");
+
+            case PostgresCompositeType pgCompositeType:
+                throw new NotSupportedException(
+                    $"Composite type '{pgCompositeType}' must be mapped with Npgsql before being used, see the docs.");
 
             default:
                 throw new ArgumentOutOfRangeException($"Unhandled PostgreSQL type type: {pgType.GetType()}");
             }
-
-            // bool TryResolve(string typeName, [NotNullWhen(true)] out NpgsqlTypeHandler? handler)
-            // {
-            //     foreach (var resolver in _resolvers)
-            //         if ((handler = resolver.ResolveDataTypeName(typeName)) is not null)
-            //             return true;
-            //     handler = null;
-            //     return false;
-            // }
         }
 
         // internal NpgsqlTypeHandler GetByDataTypeName(string typeName)
@@ -525,34 +532,134 @@ namespace Npgsql.TypeMapping
 
         #region Mapping management
 
-        protected override INpgsqlTypeMapper DoMapEnum<TEnum>(string pgName, INpgsqlNameTranslator nameTranslator)
+        public override INpgsqlTypeMapper MapEnum<TEnum>(string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
         {
-            var userEnumMapping = new UserEnumTypeMapping<TEnum>(pgName, nameTranslator);
+            if (pgName != null && pgName.Trim() == "")
+                throw new ArgumentException("pgName can't be empty", nameof(pgName));
 
-            if (DatabaseInfo.GetPostgresTypeByName(userEnumMapping.PgTypeName) is not PostgresEnumType pgEnumType)
-                throw new InvalidCastException($"Cannot map enum type {userEnumMapping.ClrType.Name} to PostgreSQL type {userEnumMapping.PgTypeName} which isn't an enum");
+            nameTranslator ??= DefaultNameTranslator;
+            pgName ??= GetPgName(typeof(TEnum), nameTranslator);
 
-            ApplyEnumMapping(pgEnumType, userEnumMapping);
+            if (DatabaseInfo.GetPostgresTypeByName(pgName) is not PostgresEnumType pgEnumType)
+                throw new InvalidCastException($"Cannot map enum type {typeof(TEnum).Name} to PostgreSQL type {pgName} which isn't an enum");
+
+            var handler = new UserEnumTypeMapping<TEnum>(pgName, nameTranslator).CreateHandler(pgEnumType);
+
+            ApplyUserMapping(pgEnumType, typeof(TEnum), handler);
+
             return this;
         }
 
-        void ApplyEnumMapping(PostgresEnumType pgEnumType, IUserEnumTypeMapping userEnumMapping)
-            => _extraHandlersByOID[pgEnumType.OID] =
-                _extraHandlersByClrType[userEnumMapping.ClrType] =
-                    _extraHandlersByDataTypeName[userEnumMapping.PgTypeName] =
-                        userEnumMapping.CreateHandler(pgEnumType);
-
-        protected override bool DoUnmapEnum<TEnum>(string pgName, INpgsqlNameTranslator nameTranslator)
+        public override bool UnmapEnum<TEnum>(string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
         {
+            if (pgName != null && pgName.Trim() == "")
+                throw new ArgumentException("pgName can't be empty", nameof(pgName));
+
+            nameTranslator ??= DefaultNameTranslator;
+            pgName ??= GetPgName(typeof(TEnum), nameTranslator);
+
             var userEnumMapping = new UserEnumTypeMapping<TEnum>(pgName, nameTranslator);
 
-            if (DatabaseInfo.GetPostgresTypeByName(userEnumMapping.PgTypeName) is not PostgresEnumType pgEnumType)
-                throw new InvalidCastException($"Cannot map enum type {userEnumMapping.ClrType.Name} to PostgreSQL type {userEnumMapping.PgTypeName} which isn't an enum");
+            if (DatabaseInfo.GetPostgresTypeByName(pgName) is not PostgresEnumType pgEnumType)
+                throw new InvalidCastException($"Could not find {pgName}");
 
             var found = _extraHandlersByOID.Remove(pgEnumType.OID, out _);
             found |= _extraHandlersByClrType.Remove(userEnumMapping.ClrType, out _);
             found |= _extraHandlersByDataTypeName.Remove(userEnumMapping.PgTypeName, out _);
             return found;
+        }
+
+        public override INpgsqlTypeMapper MapComposite<T>(string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
+        {
+            if (pgName != null && pgName.Trim() == "")
+                throw new ArgumentException("pgName can't be empty", nameof(pgName));
+
+            nameTranslator ??= DefaultNameTranslator;
+            pgName ??= GetPgName(typeof(T), nameTranslator);
+
+            if (DatabaseInfo.GetPostgresTypeByName(pgName) is not PostgresCompositeType pgCompositeType)
+            {
+                throw new InvalidCastException(
+                    $"Cannot map composite type {typeof(T).Name} to PostgreSQL type {pgName} which isn't a composite");
+            }
+
+            var handler = new UserCompositeTypeMapping<T>(pgName, nameTranslator).CreateHandler(pgCompositeType, _connector);
+
+            ApplyUserMapping(pgCompositeType, typeof(T), handler);
+
+            return this;
+        }
+
+        public override INpgsqlTypeMapper MapComposite(Type clrType, string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
+        {
+            if (pgName != null && pgName.Trim() == "")
+                throw new ArgumentException("pgName can't be empty", nameof(pgName));
+
+            nameTranslator ??= DefaultNameTranslator;
+            pgName ??= GetPgName(clrType, nameTranslator);
+
+            if (DatabaseInfo.GetPostgresTypeByName(pgName) is not PostgresCompositeType pgCompositeType)
+            {
+                throw new InvalidCastException(
+                    $"Cannot map composite type {clrType.Name} to PostgreSQL type {pgName} which isn't a composite");
+            }
+
+            var userCompositeMapping =
+                (IUserCompositeTypeMapping)Activator.CreateInstance(typeof(UserCompositeTypeMapping<>).MakeGenericType(clrType),
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null,
+                new object[] { clrType, nameTranslator }, null)!;
+
+            var handler = userCompositeMapping.CreateHandler(pgCompositeType, _connector);
+
+            ApplyUserMapping(pgCompositeType, clrType, handler);
+
+            return this;
+        }
+
+        public override bool UnmapComposite<T>(string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
+            => UnmapComposite(typeof(T), pgName, nameTranslator);
+
+        public override bool UnmapComposite(Type clrType, string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
+        {
+            if (pgName != null && pgName.Trim() == "")
+                throw new ArgumentException("pgName can't be empty", nameof(pgName));
+
+            nameTranslator ??= DefaultNameTranslator;
+            pgName ??= GetPgName(clrType, nameTranslator);
+
+            if (DatabaseInfo.GetPostgresTypeByName(pgName) is not PostgresCompositeType pgCompositeType)
+                throw new InvalidCastException($"Could not find {pgName}");
+
+            var found = _extraHandlersByOID.Remove(pgCompositeType.OID, out _);
+            found |= _extraHandlersByClrType.Remove(clrType, out _);
+            found |= _extraHandlersByDataTypeName.Remove(pgName, out _);
+            return found;
+        }
+
+        void ApplyUserMapping(PostgresType pgType, Type clrType, NpgsqlTypeHandler handler)
+            => _extraHandlersByOID[pgType.OID] =
+                _extraHandlersByDataTypeName[pgType.FullName] =
+                    _extraHandlersByDataTypeName[pgType.Name] =
+                        _extraHandlersByClrType[clrType] = handler;
+
+        public override void AddTypeResolverFactory(ITypeHandlerResolverFactory resolverFactory)
+        {
+            var sw = new SpinWait();
+            while (true)
+            {
+                var oldResolvers = _resolvers;
+                var newResolvers = new ITypeHandlerResolver[_resolvers.Length + 1];
+                Array.Copy(oldResolvers, 0, newResolvers, 1, _resolvers.Length);
+                newResolvers[0] = resolverFactory.Create(_connector);
+
+                if (Interlocked.CompareExchange(ref _resolvers, newResolvers, oldResolvers) == oldResolvers)
+                {
+                    ChangeCounter = -1;
+                    return;
+                }
+
+                sw.SpinOnce();
+            }
         }
 
         public override INpgsqlTypeMapper AddMapping(NpgsqlTypeMapping mapping)
@@ -659,7 +766,17 @@ namespace Npgsql.TypeMapping
                         if (DatabaseInfo.TryGetPostgresTypeByName(userEnumMapping.PgTypeName, out var pgType) &&
                             pgType is PostgresEnumType pgEnumType)
                         {
-                            ApplyEnumMapping(pgEnumType, userEnumMapping);
+                            ApplyUserMapping(pgEnumType, userEnumMapping.ClrType, userEnumMapping.CreateHandler(pgEnumType));
+                        }
+                    }
+
+                    foreach (var userCompositeMapping in globalMapper.UserCompositeTypeMappings.Values)
+                    {
+                        if (DatabaseInfo.TryGetPostgresTypeByName(userCompositeMapping.PgTypeName, out var pgType) &&
+                            pgType is PostgresCompositeType postgresCompositeType)
+                        {
+                            ApplyUserMapping(postgresCompositeType, userCompositeMapping.ClrType,
+                                userCompositeMapping.CreateHandler(postgresCompositeType, _connector));
                         }
                     }
                 }

@@ -7,7 +7,7 @@ namespace Npgsql.TypeMapping
 {
     public class BuiltInTypeHandlerResolverFactory : ITypeHandlerResolverFactory
     {
-        public ITypeHandlerResolver Create(NpgsqlConnector npgsqlConnector)
-            => new BuiltInTypeHandlerResolver(npgsqlConnector);
+        public ITypeHandlerResolver Create(NpgsqlConnector connector)
+            => new BuiltInTypeHandlerResolver(connector);
     }
 }

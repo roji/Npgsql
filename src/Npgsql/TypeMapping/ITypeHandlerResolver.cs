@@ -10,7 +10,7 @@ namespace Npgsql.TypeMapping
 {
     public interface ITypeHandlerResolver
     {
-        bool ResolveOID(uint oid, [NotNullWhen(true)] out NpgsqlTypeHandler? handler);
+        NpgsqlTypeHandler? ResolveOID(uint oid);
 
         NpgsqlTypeHandler? ResolveNpgsqlDbType(NpgsqlDbType npgsqlDbType);
 

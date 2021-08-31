@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Npgsql.BackendMessages;
 using Npgsql.Internal;
+using Npgsql.Internal.TypeHandlers;
 using Npgsql.Internal.TypeHandling;
 using Npgsql.PostgresTypes;
 using Npgsql.Tests.Support;
@@ -1589,11 +1590,7 @@ LANGUAGE plpgsql VOLATILE";
 
             using var conn = await OpenConnectionAsync();
             // Temporarily reroute integer to go to a type handler which generates SafeReadExceptions
-            conn.TypeMapper.AddMapping(new NpgsqlTypeMappingBuilder
-            {
-                PgTypeName = "integer",
-                TypeHandlerFactory = new ExplodingTypeHandlerFactory(true)
-            }.Build());
+            conn.TypeMapper.AddTypeResolverFactory(new ExplodingTypeHandlerResolverFactory(safe: true));
             using var cmd = new NpgsqlCommand(@"SELECT 1, 'hello'", conn);
             using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SequentialAccess);
             reader.Read();
@@ -1611,11 +1608,7 @@ LANGUAGE plpgsql VOLATILE";
 
             using var conn = await OpenConnectionAsync();
             // Temporarily reroute integer to go to a type handler which generates some exception
-            conn.TypeMapper.AddMapping(new NpgsqlTypeMappingBuilder()
-            {
-                PgTypeName = "integer",
-                TypeHandlerFactory = new ExplodingTypeHandlerFactory(false)
-            }.Build());
+            conn.TypeMapper.AddTypeResolverFactory(new ExplodingTypeHandlerResolverFactory(safe: false));
             using var cmd = new NpgsqlCommand(@"SELECT 1, 'hello'", conn);
             using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SequentialAccess);
             reader.Read();
@@ -2099,12 +2092,24 @@ LANGUAGE plpgsql VOLATILE";
 
     #region Mock Type Handlers
 
-    class ExplodingTypeHandlerFactory : NpgsqlTypeHandlerFactory<int>
+    class ExplodingTypeHandlerResolverFactory : ITypeHandlerResolverFactory
     {
         readonly bool _safe;
-        internal ExplodingTypeHandlerFactory(bool safe) => _safe = safe;
-        public override NpgsqlTypeHandler<int> Create(PostgresType postgresType, NpgsqlConnector conn)
-            => new ExplodingTypeHandler(postgresType, _safe);
+        public ExplodingTypeHandlerResolverFactory(bool safe) => _safe = safe;
+        public ITypeHandlerResolver Create(NpgsqlConnector connector) => new ExplodingTypeHandlerResolver(_safe);
+
+        class ExplodingTypeHandlerResolver : ITypeHandlerResolver
+        {
+            readonly bool _safe;
+
+            public ExplodingTypeHandlerResolver(bool safe) => _safe = safe;
+
+            public NpgsqlTypeHandler? ResolveOID(uint oid) =>
+                oid == PostgresTypeOIDs.Int4 ? new ExplodingTypeHandler(null!, _safe) : null;
+            public NpgsqlTypeHandler? ResolveClrType(Type type) => null;
+            public NpgsqlTypeHandler? ResolveNpgsqlDbType(NpgsqlDbType npgsqlDbType) => null;
+            public NpgsqlTypeHandler? ResolveDataTypeName(string typeName) => null;
+        }
     }
 
     class ExplodingTypeHandler : NpgsqlSimpleTypeHandler<int>

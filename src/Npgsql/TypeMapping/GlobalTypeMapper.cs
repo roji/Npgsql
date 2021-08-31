@@ -31,6 +31,7 @@ namespace Npgsql.TypeMapping
         public static GlobalTypeMapper Instance { get; }
 
         internal List<ITypeHandlerResolverFactory> ResolverFactories { get; } = new();
+        internal Dictionary<string, IUserCompositeTypeMapping> UserCompositeTypeMappings { get; } = new();
         internal Dictionary<string, IUserEnumTypeMapping> UserEnumTypeMappings { get; } = new();
 
         internal ImmutableDictionary<string, NpgsqlTypeMapping> MappingsByName { get; private set; }
@@ -56,12 +57,86 @@ namespace Npgsql.TypeMapping
 
         #region Mapping management
 
-        protected override INpgsqlTypeMapper DoMapEnum<TEnum>(string pgName, INpgsqlNameTranslator nameTranslator)
+        public override INpgsqlTypeMapper MapEnum<TEnum>(string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
         {
+            if (pgName != null && pgName.Trim() == "")
+                throw new ArgumentException("pgName can't be empty", nameof(pgName));
+
+            nameTranslator ??= DefaultNameTranslator;
+            pgName ??= GetPgName(typeof(TEnum), nameTranslator);
+
             Lock.EnterWriteLock();
             try
             {
                 UserEnumTypeMappings[pgName] = new UserEnumTypeMapping<TEnum>(pgName, nameTranslator);
+                RecordChange();
+                return this;
+            }
+            finally
+            {
+                Lock.ExitWriteLock();
+            }
+        }
+
+        public override bool UnmapEnum<TEnum>(string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
+        {
+            if (pgName != null && pgName.Trim() == "")
+                throw new ArgumentException("pgName can't be empty", nameof(pgName));
+
+            nameTranslator ??= DefaultNameTranslator;
+            pgName ??= GetPgName(typeof(TEnum), nameTranslator);
+
+            Lock.EnterWriteLock();
+            try
+            {
+                var removed = UserEnumTypeMappings.Remove(pgName);
+                RecordChange();
+                return removed;
+            }
+            finally
+            {
+                Lock.ExitWriteLock();
+            }
+        }
+
+        public override INpgsqlTypeMapper MapComposite<T>(string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
+        {
+            if (pgName != null && pgName.Trim() == "")
+                throw new ArgumentException("pgName can't be empty", nameof(pgName));
+
+            nameTranslator ??= DefaultNameTranslator;
+            pgName ??= GetPgName(typeof(T), nameTranslator);
+
+            Lock.EnterWriteLock();
+            try
+            {
+                UserCompositeTypeMappings[pgName] = new UserCompositeTypeMapping<T>(pgName, nameTranslator);
+                RecordChange();
+                return this;
+            }
+            finally
+            {
+                Lock.ExitWriteLock();
+            }
+        }
+
+        public override INpgsqlTypeMapper MapComposite(Type clrType, string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
+        {
+            if (pgName != null && pgName.Trim() == "")
+                throw new ArgumentException("pgName can't be empty", nameof(pgName));
+
+            nameTranslator ??= DefaultNameTranslator;
+            pgName ??= GetPgName(clrType, nameTranslator);
+
+            Lock.EnterWriteLock();
+            try
+            {
+                UserCompositeTypeMappings[pgName] =
+                    (IUserCompositeTypeMapping)Activator.CreateInstance(typeof(UserCompositeTypeMapping<>).MakeGenericType(clrType),
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null,
+                        new object[] { clrType, nameTranslator }, null)!;
+
+                RecordChange();
 
                 return this;
             }
@@ -71,12 +146,37 @@ namespace Npgsql.TypeMapping
             }
         }
 
-        protected override bool DoUnmapEnum<TEnum>(string pgName, INpgsqlNameTranslator nameTranslator)
+        public override bool UnmapComposite<T>(string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
+            => UnmapComposite(typeof(T), pgName, nameTranslator);
+
+        public override bool UnmapComposite(Type clrType, string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
+        {
+            if (pgName != null && pgName.Trim() == "")
+                throw new ArgumentException("pgName can't be empty", nameof(pgName));
+
+            nameTranslator ??= DefaultNameTranslator;
+            pgName ??= GetPgName(clrType, nameTranslator);
+
+            Lock.EnterWriteLock();
+            try
+            {
+                var removed = UserCompositeTypeMappings.Remove(pgName);
+                RecordChange();
+                return removed;
+            }
+            finally
+            {
+                Lock.ExitWriteLock();
+            }
+        }
+
+        public override void AddTypeResolverFactory(ITypeHandlerResolverFactory resolverFactory)
         {
             Lock.EnterWriteLock();
             try
             {
-                return UserEnumTypeMappings.Remove(pgName);
+                ResolverFactories.Insert(0, resolverFactory);
+                RecordChange();
             }
             finally
             {
@@ -190,6 +290,9 @@ namespace Npgsql.TypeMapping
             {
                 ResolverFactories.Clear();
                 ResolverFactories.Add(new BuiltInTypeHandlerResolverFactory());
+
+                UserEnumTypeMappings.Clear();
+                UserCompositeTypeMappings.Clear();
 
                 // TODO: Remove
                 SetupBuiltInHandlers();

@@ -1,11 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
-using Npgsql.Internal.TypeHandlers;
-using Npgsql.Internal.TypeHandlers.CompositeHandlers;
-using Npgsql.Internal.TypeHandling;
 using NpgsqlTypes;
 
 namespace Npgsql.TypeMapping
@@ -29,84 +25,73 @@ namespace Npgsql.TypeMapping
         public abstract IEnumerable<NpgsqlTypeMapping> Mappings { get; }
         public abstract void Reset();
 
-        #endregion Mapping management
-
-        #region Enum mapping
-
-        public INpgsqlTypeMapper MapEnum<TEnum>(string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
-            where TEnum : struct, Enum
-        {
-            if (pgName != null && pgName.Trim() == "")
-                throw new ArgumentException("pgName can't be empty", nameof(pgName));
-
-            nameTranslator ??= DefaultNameTranslator;
-
-            return DoMapEnum<TEnum>(pgName ?? GetPgName(typeof(TEnum), nameTranslator), nameTranslator);
-        }
-
-        protected abstract INpgsqlTypeMapper DoMapEnum<TEnum>(string pgName, INpgsqlNameTranslator nameTranslator)
+        /// <inheritdoc />
+        public abstract INpgsqlTypeMapper MapEnum<TEnum>(string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
             where TEnum : struct, Enum;
 
-        public bool UnmapEnum<TEnum>(string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
-            where TEnum : struct, Enum
-        {
-            if (pgName != null && pgName.Trim() == "")
-                throw new ArgumentException("pgName can't be empty", nameof(pgName));
-
-            nameTranslator ??= DefaultNameTranslator;
-
-            return DoUnmapEnum<TEnum>(pgName ?? GetPgName(typeof(TEnum), nameTranslator), nameTranslator);
-        }
-
-        protected abstract bool DoUnmapEnum<TEnum>(string pgName, INpgsqlNameTranslator nameTranslator)
+        /// <inheritdoc />
+        public abstract bool UnmapEnum<TEnum>(string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
             where TEnum : struct, Enum;
 
-        #endregion Enum mapping
-
-        #region Composite mapping
-
+        /// <inheritdoc />
         [RequiresUnreferencedCode("Composite type mapping currently isn't trimming-safe.")]
-        public INpgsqlTypeMapper MapComposite<T>(string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
-            => MapComposite(pgName, nameTranslator, typeof(T), t => new CompositeTypeHandlerFactory<T>(t));
+        public abstract INpgsqlTypeMapper MapComposite<T>(string? pgName = null, INpgsqlNameTranslator? nameTranslator = null);
 
+        /// <inheritdoc />
         [RequiresUnreferencedCode("Composite type mapping currently isn't trimming-safe.")]
-        public INpgsqlTypeMapper MapComposite(Type clrType, string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
-            => MapComposite(pgName, nameTranslator, clrType, t => (NpgsqlTypeHandlerFactory)
-                Activator.CreateInstance(typeof(CompositeTypeHandlerFactory<>).MakeGenericType(clrType), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new object[] { t }, null)!);
+        public abstract INpgsqlTypeMapper MapComposite(Type clrType, string? pgName = null, INpgsqlNameTranslator? nameTranslator = null);
 
-        INpgsqlTypeMapper MapComposite(string? pgName, INpgsqlNameTranslator? nameTranslator, Type type, Func<INpgsqlNameTranslator, NpgsqlTypeHandlerFactory> factory)
-        {
-            if (pgName != null && string.IsNullOrWhiteSpace(pgName))
-                throw new ArgumentException("pgName can't be empty.", nameof(pgName));
+        /// <inheritdoc />
+        public abstract bool UnmapComposite<T>(string? pgName = null, INpgsqlNameTranslator? nameTranslator = null);
 
-            nameTranslator ??= DefaultNameTranslator;
-            pgName ??= GetPgName(type, nameTranslator);
+        /// <inheritdoc />
+        public abstract bool UnmapComposite(Type clrType, string? pgName = null, INpgsqlNameTranslator? nameTranslator = null);
 
-            return AddMapping(
-                new NpgsqlTypeMappingBuilder
-                {
-                    PgTypeName = pgName,
-                    ClrTypes = new[] { type },
-                    TypeHandlerFactory = factory(nameTranslator),
-                }
-                .Build());
-        }
+        /// <inheritdoc />
+        public abstract void AddTypeResolverFactory(ITypeHandlerResolverFactory resolverFactory);
 
-        [RequiresUnreferencedCode("Composite type mapping currently isn't trimming-safe.")]
-        public bool UnmapComposite<T>(string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
-            => UnmapComposite(typeof(T), pgName, nameTranslator);
-
-        [RequiresUnreferencedCode("Composite type mapping currently isn't trimming-safe.")]
-        public bool UnmapComposite(Type clrType, string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
-        {
-            if (pgName != null && string.IsNullOrWhiteSpace(pgName))
-                throw new ArgumentException("pgName can't be empty.", nameof(pgName));
-
-            nameTranslator ??= DefaultNameTranslator;
-            pgName ??= GetPgName(clrType, nameTranslator);
-
-            return RemoveMapping(pgName);
-        }
+        // [RequiresUnreferencedCode("Composite type mapping currently isn't trimming-safe.")]
+        // public INpgsqlTypeMapper MapComposite<T>(string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
+        //     => MapComposite(pgName, nameTranslator, typeof(T), t => new CompositeTypeHandlerFactory<T>(t));
+        //
+        // [RequiresUnreferencedCode("Composite type mapping currently isn't trimming-safe.")]
+        // public INpgsqlTypeMapper MapComposite(Type clrType, string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
+        //     => MapComposite(pgName, nameTranslator, clrType, t => (NpgsqlTypeHandlerFactory)
+        //         Activator.CreateInstance(typeof(CompositeTypeHandlerFactory<>).MakeGenericType(clrType), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new object[] { t }, null)!);
+        //
+        // INpgsqlTypeMapper MapComposite(string? pgName, INpgsqlNameTranslator? nameTranslator, Type type, Func<INpgsqlNameTranslator, NpgsqlTypeHandlerFactory> factory)
+        // {
+        //     if (pgName != null && string.IsNullOrWhiteSpace(pgName))
+        //         throw new ArgumentException("pgName can't be empty.", nameof(pgName));
+        //
+        //     nameTranslator ??= DefaultNameTranslator;
+        //     pgName ??= GetPgName(type, nameTranslator);
+        //
+        //     return AddMapping(
+        //         new NpgsqlTypeMappingBuilder
+        //         {
+        //             PgTypeName = pgName,
+        //             ClrTypes = new[] { type },
+        //             TypeHandlerFactory = factory(nameTranslator),
+        //         }
+        //         .Build());
+        // }
+        //
+        // [RequiresUnreferencedCode("Composite type mapping currently isn't trimming-safe.")]
+        // public bool UnmapComposite<T>(string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
+        //     => UnmapComposite(typeof(T), pgName, nameTranslator);
+        //
+        // [RequiresUnreferencedCode("Composite type mapping currently isn't trimming-safe.")]
+        // public bool UnmapComposite(Type clrType, string? pgName = null, INpgsqlNameTranslator? nameTranslator = null)
+        // {
+        //     if (pgName != null && string.IsNullOrWhiteSpace(pgName))
+        //         throw new ArgumentException("pgName can't be empty.", nameof(pgName));
+        //
+        //     nameTranslator ??= DefaultNameTranslator;
+        //     pgName ??= GetPgName(clrType, nameTranslator);
+        //
+        //     return RemoveMapping(pgName);
+        // }
 
         #endregion Composite mapping
 

@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Threading.Tasks;
 using Npgsql.PostgresTypes;
 using Npgsql.Util;
@@ -137,7 +138,7 @@ namespace Npgsql.Internal
         /// <summary>
         /// Indexes backend types by their type OID.
         /// </summary>
-        internal Dictionary<uint, PostgresType> ByOID { get; } = new();
+        public Dictionary<uint, PostgresType> ByOID { get; } = new();
 
         /// <summary>
         /// Indexes backend types by their PostgreSQL name, including namespace (e.g. pg_catalog.int4).
@@ -181,7 +182,7 @@ namespace Npgsql.Internal
             Version = ParseServerVersion(serverVersion);
         }
 
-        internal PostgresType GetPostgresTypeByName(string pgName)
+        public PostgresType GetPostgresTypeByName(string pgName)
             => TryGetPostgresTypeByName(pgName, out var pgType)
                 ? pgType
                 : throw new ArgumentException($"A PostgreSQL type with the name {pgName} was not found in the database");
@@ -206,8 +207,9 @@ namespace Npgsql.Internal
                 if (ByFullName.TryGetValue($"pg_catalog.{pgName}", out pgType))
                     return true;
 
+                var ambiguousTypes = ByFullName.Keys.Where(n => n.EndsWith($".{pgName}", StringComparison.Ordinal));
                 throw new ArgumentException($"More than one PostgreSQL type was found with the name {pgName}, " +
-                                            "please specify a full name including schema");
+                                            $"please specify a full name including schema: {string.Join(", ", ambiguousTypes)}");
             }
 
             return false;
