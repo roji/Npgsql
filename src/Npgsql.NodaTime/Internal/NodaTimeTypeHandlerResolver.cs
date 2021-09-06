@@ -19,6 +19,7 @@ namespace Npgsql.NodaTime.Internal
         readonly TimeHandler _timeHandler;
         readonly TimeTzHandler _timeTzHandler;
         readonly IntervalHandler _intervalHandler;
+        readonly DateRangeHandler _dateRangeHandler;
 
         internal NodaTimeTypeHandlerResolver(NpgsqlConnector connector)
         {
@@ -30,6 +31,7 @@ namespace Npgsql.NodaTime.Internal
             _timeHandler = new TimeHandler(PgType("time without time zone"));
             _timeTzHandler = new TimeTzHandler(PgType("time with time zone"));
             _intervalHandler = new IntervalHandler(PgType("interval"));
+            _dateRangeHandler = new DateRangeHandler(PgType("daterange"), _dateHandler);
         }
 
         public NpgsqlTypeHandler? ResolveByOID(uint oid)
@@ -46,6 +48,7 @@ namespace Npgsql.NodaTime.Internal
                 "time without time zone" => _timeHandler,
                 "time with time zone" => _timeTzHandler,
                 "interval" => _intervalHandler,
+                "daterange" => _dateRangeHandler,
 
                 _ => null
             };
@@ -69,6 +72,8 @@ namespace Npgsql.NodaTime.Internal
                 return "time with time zone";
             if (type == typeof(Period) || type == typeof(Duration))
                 return "interval";
+            if (type == typeof(DateInterval) || type == typeof(NpgsqlRange<LocalDate>))
+                return "daterange";
 
             return null;
         }
@@ -82,11 +87,11 @@ namespace Npgsql.NodaTime.Internal
                 PostgresTypeOIDs.Time        => "time without time zone",
                 PostgresTypeOIDs.TimeTz      => "time with time zone",
                 PostgresTypeOIDs.Interval    => "interval",
+                PostgresTypeOIDs.DateRange   => "daterange",
 
                 _ => null
             };
 
-        // TODO: Integrate CLR type info (for schema)
         public TypeMappingInfo? GetMappingByDataTypeName(string dataTypeName)
             => DoGetMappingByDataTypeName(dataTypeName);
 
@@ -99,6 +104,7 @@ namespace Npgsql.NodaTime.Internal
                 "time without time zone"                     => new(NpgsqlDbType.Time,        DbType.Time,     "time without time zone"),
                 "time with time zone"                        => new(NpgsqlDbType.TimeTz,      DbType.Object,   "time with time zone"),
                 "interval"                                   => new(NpgsqlDbType.Interval,    DbType.Object,   "interval"),
+                "daterange"                                  => new(NpgsqlDbType.DateRange,   DbType.Object,   "daterange"),
 
                 _ => null
             };

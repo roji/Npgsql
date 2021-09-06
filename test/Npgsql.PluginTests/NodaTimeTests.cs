@@ -505,6 +505,34 @@ namespace Npgsql.PluginTests
 
         #endregion Interval
 
+        #region DateInterval
+
+        [Test]
+        public void DateRange()
+        {
+            var expectedRange = new NpgsqlRange<LocalDate>(new LocalDate(2002, 3, 4), true, new LocalDate(2002, 3, 9), false);
+            var expectedDateInterval = new DateInterval(new LocalDate(2002, 3, 4), new LocalDate(2002, 3, 8));
+
+            using var conn = OpenConnection();
+            using var cmd = new NpgsqlCommand("SELECT @p1, @p2, @p3, @p4", conn);
+            cmd.Parameters.Add(new NpgsqlParameter("p1", NpgsqlDbType.DateRange) { Value = expectedRange });
+            cmd.Parameters.Add(new NpgsqlParameter("p2", NpgsqlDbType.DateRange) { Value = expectedDateInterval });
+            cmd.Parameters.AddWithValue("p3", expectedRange);
+            cmd.Parameters.AddWithValue("p4", expectedDateInterval);
+            using var reader = cmd.ExecuteReader();
+            reader.Read();
+
+            for (var i = 0; i < 4; i++)
+            {
+                Assert.That(reader.GetFieldType(i), Is.EqualTo(typeof(DateInterval)));
+                Assert.That(reader.GetValue(i), Is.EqualTo(expectedDateInterval));
+                Assert.That(reader.GetFieldValue<NpgsqlRange<LocalDate>>(i), Is.EqualTo(expectedRange));
+                Assert.That(reader.GetFieldValue<DateInterval>(i), Is.EqualTo(expectedDateInterval));
+            }
+        }
+
+        #endregion DateInterval
+
         #region Support
 
         protected override NpgsqlConnection OpenConnection(string? connectionString = null)
