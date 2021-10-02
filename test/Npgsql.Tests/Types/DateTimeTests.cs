@@ -124,6 +124,24 @@ namespace Npgsql.Tests.Types
             Assert.That(reader.GetFieldValue<DateOnly>(0), Is.EqualTo(DateOnly.MaxValue));
             Assert.That(reader.GetFieldValue<DateOnly>(1), Is.EqualTo(DateOnly.MinValue));
         }
+
+        [Test]
+        public async Task Date_DateOnly_range()
+        {
+            using var conn = await OpenConnectionAsync();
+            var range = new NpgsqlRange<DateOnly>(new(2002, 3, 4), new(2002, 3, 5));
+
+            using var cmd = new NpgsqlCommand("SELECT @p1", conn);
+            var p1 = new NpgsqlParameter { ParameterName = "p1", Value = range };
+            // Assert.That(p1.NpgsqlDbType, Is.EqualTo(NpgsqlDbType.Date));
+            // Assert.That(p1.DbType, Is.EqualTo(DbType.Date));
+            cmd.Parameters.Add(p1);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            reader.Read();
+
+            Assert.That(reader.GetFieldValue<NpgsqlRange<DateOnly>>(0), Is.EqualTo(range));
+        }
 #endif
 
         #endregion
