@@ -20,12 +20,13 @@ namespace Npgsql.SourceGenerators
         {
             var compilation = context.Compilation;
 
-            var (simpleTypeHandlerInterfaceSymbol, typeHandlerInterfaceSymbol) = (
+            var (simpleTypeHandlerInterfaceSymbol, typeHandlerInterfaceSymbol, genericTypeHandlerBaseClassSymbol) = (
                 compilation.GetTypeByMetadataName("Npgsql.Internal.TypeHandling.INpgsqlSimpleTypeHandler`1"),
-                compilation.GetTypeByMetadataName("Npgsql.Internal.TypeHandling.INpgsqlTypeHandler`1"));
+                compilation.GetTypeByMetadataName("Npgsql.Internal.TypeHandling.INpgsqlTypeHandler`1"),
+                compilation.GetTypeByMetadataName("Npgsql.Internal.TypeHandling.NpgsqlTypeHandler`1"));
 
-            if (simpleTypeHandlerInterfaceSymbol is null || typeHandlerInterfaceSymbol is null)
-                throw new Exception("Could not find INpgsqlSimpleTypeHandler or INpgsqlTypeHandler");
+            if (simpleTypeHandlerInterfaceSymbol is null || typeHandlerInterfaceSymbol is null || genericTypeHandlerBaseClassSymbol is null)
+                throw new Exception("Could not find INpgsqlSimpleTypeHandler<T>, INpgsqlTypeHandler<T> or NpgsqlTypeHandler<T>");
 
             var template = Template.Parse(EmbeddedResource.GetContent("TypeHandler.snbtxt"), "TypeHandler.snbtxt");
 
@@ -61,7 +62,9 @@ namespace Npgsql.SourceGenerators
                         "System",
                         "System.Threading",
                         "System.Threading.Tasks",
-                        "Npgsql.Internal"
+                        "Npgsql.Internal",
+                        "Npgsql.Internal.TypeHandlers",
+                        "NpgsqlTypes"
                     }.Concat(classDeclarationSyntax.SyntaxTree.GetCompilationUnitRoot().Usings
                         .Where(u => u.Alias is null && u.StaticKeyword.Kind() == SyntaxKind.None)
                         .Select(u => u.Name.ToString())));
@@ -71,17 +74,28 @@ namespace Npgsql.SourceGenerators
                                     SymbolEqualityComparer.Default) &&
                                 !i.TypeArguments[0].IsAbstract);
 
+                // Find the handler's default handled type by locating its NpgsqlTypeHandler<T> base class
+                var baseType = typeSymbol;
+                do
+                {
+                    baseType = baseType.BaseType;
+                } while (baseType is not null && !(baseType.IsGenericType && baseType.OriginalDefinition.Equals(genericTypeHandlerBaseClassSymbol, SymbolEqualityComparer.Default)));
+                var defaultHandledType = baseType?.TypeArguments[0];
+                // var defaultHandledType = typeSymbol.BaseType;
+                // var defaultHandledType = typeSymbol.BaseType!.Equals(genericTypeHandlerBaseClassSymbol, SymbolEqualityComparer.Default);
+
                 var output = template.Render(new
                 {
                     Usings = usings,
-                    TypeName = FormatTypeName(typeSymbol),
+                    HandlerTypeName = FormatTypeName(typeSymbol),
                     Namespace = typeSymbol.ContainingNamespace.ToDisplayString(),
                     IsSimple = isSimple,
+                    DefaultHandledType = defaultHandledType is null ? null : FormatTypeName(defaultHandledType),
                     Interfaces = interfaces.Select(i => new
                     {
                         Name = FormatTypeName(i),
-                        HandledType = FormatTypeName(i.TypeArguments[0]),
-                    })
+                        HandledType = FormatTypeName(i.TypeArguments[0])
+                    }).ToArray()
                 });
 
                 context.AddSource(typeSymbol.Name + ".Generated.cs", SourceText.From(output, Encoding.UTF8));
@@ -103,7 +117,6 @@ namespace Npgsql.SourceGenerators
                 if (typeSymbol.TypeKind == TypeKind.Array)
                 {
                     return $"{FormatTypeName(((IArrayTypeSymbol)typeSymbol).ElementType)}[]";
-                    // return "int";
                 }
 
                 return typeSymbol.ToString();

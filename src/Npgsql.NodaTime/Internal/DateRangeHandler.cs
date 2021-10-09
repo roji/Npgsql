@@ -11,7 +11,7 @@ using NpgsqlTypes;
 
 namespace Npgsql.NodaTime.Internal
 {
-    public partial class DateRangeHandler : RangeHandler<LocalDate>, INpgsqlTypeHandler<DateInterval>
+    public partial class DateRangeHandler : NpgsqlRangeHandler<LocalDate>, INpgsqlTypeHandler<DateInterval>
     {
         public DateRangeHandler(PostgresType rangePostgresType, NpgsqlTypeHandler subtypeHandler)
             : base(rangePostgresType, subtypeHandler)
@@ -32,11 +32,11 @@ namespace Npgsql.NodaTime.Internal
         }
 
         public int ValidateAndGetLength(DateInterval value, ref NpgsqlLengthCache? lengthCache, NpgsqlParameter? parameter)
-            => ValidateAndGetLength(new NpgsqlRange<LocalDate>(value.Start, value.End), ref lengthCache, parameter);
+            => ValidateAndGetLengthRange(new NpgsqlRange<LocalDate>(value.Start, value.End), ref lengthCache, parameter);
 
         public Task Write(
             DateInterval value, NpgsqlWriteBuffer buf, NpgsqlLengthCache? lengthCache, NpgsqlParameter? parameter, bool async,
             CancellationToken cancellationToken = default)
-            => Write(new NpgsqlRange<LocalDate>(value.Start, value.End), buf, lengthCache, parameter, async, cancellationToken);
+            => WriteRange(new NpgsqlRange<LocalDate>(value.Start, value.End), buf, lengthCache, parameter, async, cancellationToken);
     }
 }

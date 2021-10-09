@@ -35,10 +35,6 @@ namespace Npgsql.Internal.TypeHandlers.DateTimeHandlers
             : base(postgresType)
             => ConvertInfinityDateTime = convertInfinityDateTime;
 
-        /// <inheritdoc />
-        public override NpgsqlTypeHandler CreateRangeHandler(PostgresType pgRangeType)
-            => new RangeHandler<DateTime, DateTimeOffset>(pgRangeType, this);
-
         #region Read
 
         private protected const string InfinityExceptionMessage = "Can't convert infinite timestamp values to DateTime";

@@ -9,7 +9,7 @@ using {{ using }};
 
 namespace {{ namespace }}
 {
-    partial class {{ type_name }}
+    partial class {{ handler_type_name }}
     {
         public override int ValidateObjectAndGetLength(object value, ref NpgsqlLengthCache? lengthCache, NpgsqlParameter? parameter)
             => value switch
@@ -18,7 +18,7 @@ namespace {{ namespace }}
                 {{ interface.handled_type }} converted => (({{ interface.name }})this).ValidateAndGetLength(converted, {{ is_simple ? "" : "ref lengthCache, " }}parameter),
                 {{ end }}
 
-                _ => throw new InvalidCastException($"Can't write CLR type {value.GetType()} with handler type {{ type_name }}")
+                _ => throw new InvalidCastException($"Can't write CLR type {value.GetType()} with handler type {{ handler_type_name }}")
             };
 
         public override Task WriteObjectWithLength(object? value, NpgsqlWriteBuffer buf, NpgsqlLengthCache? lengthCache, NpgsqlParameter? parameter, bool async, CancellationToken cancellationToken = default)
@@ -30,7 +30,48 @@ namespace {{ namespace }}
 
                 DBNull => WriteWithLength(DBNull.Value, buf, lengthCache, parameter, async, cancellationToken),
                 null => WriteWithLength(DBNull.Value, buf, lengthCache, parameter, async, cancellationToken),
-                _ => throw new InvalidCastException($"Can't write CLR type {value.GetType()} with handler type {{ type_name }}")
+                _ => throw new InvalidCastException($"Can't write CLR type {value.GetType()} with handler type {{ handler_type_name }}")
             };
+
+{{ ##
+If the base type handler implements more than one INpgsqlTypeHandler interface, we generate a range handler which
+implements all the range interfaces corresponding to the base handler's. Otherwise the default CreateRangeHandler
+and NpgsqlRangeHandler<T> do the job.
+## }}
+
+{{ if interfaces.size > 1 }}
+        public override NpgsqlTypeHandler CreateRangeHandler(PostgresType pgRangeType)
+            => new RangeHandler(pgRangeType, this);
+
+        class RangeHandler : NpgsqlRangeHandler<NpgsqlRange<{{ default_handled_type }}>>
+{{ for interface in interfaces }}
+{{ if interface.handled_type == default_handled_type
+    continue
+end }}
+            , INpgsqlTypeHandler<NpgsqlRange<{{ interface.handled_type }}>>
+{{ end }}
+        {
+            public RangeHandler(PostgresType rangePostgresType, NpgsqlTypeHandler subtypeHandler)
+                : base(rangePostgresType, subtypeHandler) {}
+
+{{ for interface in interfaces }}
+{{ if interface.handled_type == default_handled_type
+    continue
+end }}
+{{ range_type = "NpgsqlRange<" + interface.handled_type + ">" }}
+            ValueTask<NpgsqlRange<{{ interface.handled_type }}>> INpgsqlTypeHandler<{{ range_type }}>.Read(
+                NpgsqlReadBuffer buf, int len, bool async, FieldDescription? fieldDescription)
+                => base.ReadRange<{{ interface.handled_type }}>(buf, len, async, fieldDescription);
+
+            int INpgsqlTypeHandler<{{ range_type }}>.ValidateAndGetLength(
+                {{ range_type }} value, ref NpgsqlLengthCache? lengthCache, NpgsqlParameter? parameter)
+                => base.ValidateAndGetLengthRange<{{ interface.handled_type }}>(value, ref lengthCache, parameter);
+
+            Task INpgsqlTypeHandler<{{ range_type }}>.Write(
+                {{ range_type }} value, NpgsqlWriteBuffer buf, NpgsqlLengthCache? lengthCache, NpgsqlParameter? parameter, bool async, CancellationToken cancellationToken)
+                => base.WriteRange<{{ interface.handled_type }}>(value, buf, lengthCache, parameter, async, cancellationToken);
+{{ end }}
+        }
+{{ end }}
     }
 }

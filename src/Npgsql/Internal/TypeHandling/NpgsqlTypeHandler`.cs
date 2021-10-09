@@ -69,11 +69,11 @@ namespace Npgsql.Internal.TypeHandling
 
         /// <inheritdoc />
         public override NpgsqlTypeHandler CreateRangeHandler(PostgresType pgRangeType)
-            => new RangeHandler<TDefault>(pgRangeType, this);
+            => new NpgsqlRangeHandler<TDefault>(pgRangeType, this);
 
         /// <inheritdoc />
         public override NpgsqlTypeHandler CreateMultirangeHandler(PostgresMultirangeType pgMultirangeType)
-            => new MultirangeHandler<TDefault>(pgMultirangeType, (RangeHandler<TDefault>)CreateRangeHandler(pgMultirangeType.Subrange));
+            => new MultirangeHandler<TDefault>(pgMultirangeType, (NpgsqlRangeHandler<TDefault>)CreateRangeHandler(pgMultirangeType.Subrange));
 
         #endregion Misc
     }

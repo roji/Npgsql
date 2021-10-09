@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,10 +15,14 @@ namespace Npgsql.Internal.TypeHandlers
         /// <summary>
         /// The type handler for the range that this multirange type holds
         /// </summary>
-        protected  RangeHandler<TElement> RangeHandler { get; }
+        protected NpgsqlRangeHandler<TElement> RangeHandler { get; }
 
         /// <inheritdoc />
-        public MultirangeHandler(PostgresMultirangeType pgMultirangeType, RangeHandler<TElement> rangeHandler)
+        public override NpgsqlTypeHandler CreateRangeHandler(PostgresType pgRangeType)
+            => throw new NotSupportedException();
+
+        /// <inheritdoc />
+        public MultirangeHandler(PostgresMultirangeType pgMultirangeType, NpgsqlRangeHandler<TElement> rangeHandler)
             : base(pgMultirangeType)
             => RangeHandler = rangeHandler;
 
