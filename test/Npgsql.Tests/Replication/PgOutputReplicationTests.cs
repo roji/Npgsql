@@ -13,7 +13,7 @@ using Npgsql.Replication.PgOutput.Messages;
 namespace Npgsql.Tests.Replication
 {
     [TestFixture(ProtocolVersion.V1, ReplicationDataMode.DefaultReplicationDataMode, TransactionMode.DefaultTransactionMode)]
-    //[TestFixture(ProtocolVersion.V1, ReplicationDataMode.BinaryReplicationDataMode, TransactionMode.DefaultTransactionMode)]
+    [TestFixture(ProtocolVersion.V1, ReplicationDataMode.BinaryReplicationDataMode, TransactionMode.DefaultTransactionMode)]
     [TestFixture(ProtocolVersion.V2, ReplicationDataMode.DefaultReplicationDataMode, TransactionMode.StreamingTransactionMode)]
     // We currently don't execute all possible combinations of settings for efficiency reasons because they don't
     // interact in the current implementation.
@@ -78,13 +78,13 @@ namespace Npgsql.Tests.Replication
                 async (slotName, tableName, publicationName) =>
                 {
                     await using var c = await OpenConnectionAsync();
-                    await c.ExecuteNonQueryAsync(@$"CREATE TABLE {tableName} (id INT PRIMARY KEY, name TEXT NOT NULL);
+                    await c.ExecuteNonQueryAsync(@$"CREATE TABLE {tableName} (id INT PRIMARY KEY, name TEXT NULL);
                                                     CREATE PUBLICATION {publicationName} FOR TABLE {tableName};");
                     var rc = await OpenReplicationConnectionAsync();
                     var slot = await rc.CreatePgOutputReplicationSlot(slotName);
 
                     await using var tran = await c.BeginTransactionAsync();
-                    await c.ExecuteNonQueryAsync(@$"INSERT INTO {tableName} VALUES (1, 'val1'), (2, 'val2');
+                    await c.ExecuteNonQueryAsync(@$"INSERT INTO {tableName} VALUES (1, 'val1'), (2, NULL);
                                                     INSERT INTO {tableName} SELECT i, 'val' || i::text FROM generate_series(3, 15000) s(i);");
                     await tran.CommitAsync();
 
@@ -96,32 +96,51 @@ namespace Npgsql.Tests.Replication
                     var transactionXid = await AssertTransactionStart(messages);
 
                     // Relation
-                    var relMsg = await NextMessage<RelationMessage>(messages);
-                    Assert.That(relMsg.TransactionXid, IsStreaming ? Is.EqualTo(transactionXid) : Is.Null);
-                    Assert.That(relMsg.RelationReplicaIdentitySetting, Is.EqualTo('d'));
-                    Assert.That(relMsg.Namespace, Is.EqualTo("public"));
-                    Assert.That(relMsg.RelationName, Is.EqualTo(tableName));
-                    Assert.That(relMsg.Columns.Count, Is.EqualTo(2));
-                    Assert.That(relMsg.Columns[0].ColumnName, Is.EqualTo("id"));
-                    Assert.That(relMsg.Columns[1].ColumnName, Is.EqualTo("name"));
+                    var relationMsg = await NextMessage<RelationMessage>(messages);
+                    Assert.That(relationMsg.TransactionXid, IsStreaming ? Is.EqualTo(transactionXid) : Is.Null);
+                    Assert.That(relationMsg.RelationReplicaIdentitySetting, Is.EqualTo('d'));
+                    Assert.That(relationMsg.Namespace, Is.EqualTo("public"));
+                    Assert.That(relationMsg.RelationName, Is.EqualTo(tableName));
+                    Assert.That(relationMsg.Columns.Count, Is.EqualTo(2));
+                    Assert.That(relationMsg.Columns[0].ColumnName, Is.EqualTo("id"));
+                    Assert.That(relationMsg.Columns[1].ColumnName, Is.EqualTo("name"));
 
                     // Insert first value
                     var insertMsg = await NextMessage<InsertMessage>(messages);
                     Assert.That(insertMsg.TransactionXid, IsStreaming ? Is.EqualTo(transactionXid) : Is.Null);
-                    Assert.That(insertMsg.NewRow.Length, Is.EqualTo(2));
-                    Assert.That(insertMsg.NewRow.Span[0].Value, Is.EqualTo("1"));
-                    Assert.That(insertMsg.NewRow.Span[1].Value, Is.EqualTo("val1"));
+                    Assert.That(insertMsg.Relation, Is.SameAs(relationMsg));
+                    var columnEnumerator = insertMsg.NewRow.GetAsyncEnumerator();
+                    Assert.That(await columnEnumerator.MoveNextAsync(), Is.True);
+                    if (IsBinary)
+                        Assert.That(await columnEnumerator.Current.GetAsync<int>(), Is.EqualTo(1));
+                    else
+                        Assert.That(await columnEnumerator.Current.GetAsync<string>(), Is.EqualTo("1"));
+                    Assert.That(await columnEnumerator.MoveNextAsync(), Is.True);
+                    Assert.That(columnEnumerator.Current.IsDBNull, Is.False);
+                    Assert.That(await columnEnumerator.Current.GetAsync<string>(), Is.EqualTo("val1"));
+                    Assert.That(await columnEnumerator.MoveNextAsync(), Is.False);
 
                     // Insert second value
                     insertMsg = await NextMessage<InsertMessage>(messages);
                     Assert.That(insertMsg.TransactionXid, IsStreaming ? Is.EqualTo(transactionXid) : Is.Null);
-                    Assert.That(insertMsg.NewRow.Length, Is.EqualTo(2));
-                    Assert.That(insertMsg.NewRow.Span[0].Value, Is.EqualTo("2"));
-                    Assert.That(insertMsg.NewRow.Span[1].Value, Is.EqualTo("val2"));
+                    Assert.That(insertMsg.Relation, Is.SameAs(relationMsg));
+                    columnEnumerator = insertMsg.NewRow.GetAsyncEnumerator();
+                    Assert.That(await columnEnumerator.MoveNextAsync(), Is.True);
+                    if (IsBinary)
+                        Assert.That(await columnEnumerator.Current.GetAsync<int>(), Is.EqualTo(2));
+                    else
+                        Assert.That(await columnEnumerator.Current.GetAsync<string>(), Is.EqualTo("2"));
+                    Assert.That(await columnEnumerator.MoveNextAsync(), Is.True);
+                    Assert.That(columnEnumerator.Current.IsDBNull, Is.True);
+                    Assert.That(async () => await columnEnumerator.Current.GetAsync<string>(),
+                        Throws.Exception.TypeOf<InvalidCastException>());
+                    Assert.That(await columnEnumerator.MoveNextAsync(), Is.False);
 
                     // Remaining inserts
                     for (var insertCount = 0; insertCount < 14998; insertCount++)
+                    {
                         await NextMessage<InsertMessage>(messages);
+                    }
 
                     // Commit Transaction
                     await AssertTransactionCommit(messages);

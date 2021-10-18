@@ -85,6 +85,13 @@ Npgsql.Replication.ReplicationConnection.ServerVersion.get -> string!
 *REMOVED*Npgsql.Replication.PgOutput.Messages.BeginMessage.TransactionXid.get -> uint
 *REMOVED*Npgsql.Replication.PgOutput.Messages.RelationMessage.Columns.get -> System.ReadOnlyMemory<Npgsql.Replication.PgOutput.Messages.RelationMessage.Column>
 Npgsql.Replication.PgOutput.Messages.RelationMessage.Columns.get -> System.Collections.Generic.IReadOnlyList<Npgsql.Replication.PgOutput.Messages.RelationMessage.Column>!
+Npgsql.Replication.PgOutput.Messages.RelationMessage.Column.ColumnFlags
+Npgsql.Replication.PgOutput.Messages.RelationMessage.Column.ColumnFlags.None = 0 -> Npgsql.Replication.PgOutput.Messages.RelationMessage.Column.ColumnFlags
+Npgsql.Replication.PgOutput.Messages.RelationMessage.Column.ColumnFlags.PartOfKey = 1 -> Npgsql.Replication.PgOutput.Messages.RelationMessage.Column.ColumnFlags
+Npgsql.Replication.PgOutput.Messages.RelationMessage.Column.Flags.get -> Npgsql.Replication.PgOutput.Messages.RelationMessage.Column.ColumnFlags
+*REMOVED*Npgsql.Replication.PgOutput.Messages.InsertMessage.InsertMessage() -> void
+*REMOVED*Npgsql.Replication.PgOutput.Messages.InsertMessage.NewRow.get -> System.ReadOnlyMemory<Npgsql.Replication.PgOutput.Messages.TupleData>
+Npgsql.Replication.PgOutput.Messages.InsertMessage.Relation.get -> Npgsql.Replication.PgOutput.Messages.RelationMessage!
 Npgsql.Replication.PgOutput.Messages.TransactionalMessage
 Npgsql.Replication.PgOutput.Messages.TransactionalMessage.TransactionalMessage() -> void
 Npgsql.Replication.PgOutput.Messages.TransactionalMessage.TransactionXid.get -> uint?
@@ -115,6 +122,7 @@ Npgsql.Replication.PgOutput.Messages.StreamStartMessage.StreamSegmentIndicator.g
 Npgsql.Replication.PgOutput.Messages.StreamStartMessage.StreamStartMessage() -> void
 Npgsql.Replication.PgOutput.Messages.StreamStopMessage
 Npgsql.Replication.PgOutput.Messages.StreamStopMessage.StreamStopMessage() -> void
+Npgsql.Replication.PgOutput.Messages.TupleDataKind.BinaryValue = 98 -> Npgsql.Replication.PgOutput.Messages.TupleDataKind
 Npgsql.Replication.PgOutput.PgOutputReplicationOptions.Messages.get -> bool?
 Npgsql.Replication.PgOutput.PgOutputReplicationOptions.PgOutputReplicationOptions(string! publicationName, ulong protocolVersion, bool? binary = null, bool? streaming = null, bool? messages = null) -> void
 *REMOVED*Npgsql.Replication.PgOutput.PgOutputReplicationOptions.PgOutputReplicationOptions(System.Collections.Generic.IEnumerable<string!>! publicationNames, ulong protocolVersion = 1, bool? binary = null, bool? streaming = null) -> void

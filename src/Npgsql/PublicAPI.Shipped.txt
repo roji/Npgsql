@@ -844,7 +844,6 @@ Npgsql.Replication.PgOutput.Messages.RelationMessage.Column
 Npgsql.Replication.PgOutput.Messages.RelationMessage.Column.Column() -> void
 Npgsql.Replication.PgOutput.Messages.RelationMessage.Column.ColumnName.get -> string!
 Npgsql.Replication.PgOutput.Messages.RelationMessage.Column.DataTypeId.get -> uint
-Npgsql.Replication.PgOutput.Messages.RelationMessage.Column.Flags.get -> byte
 Npgsql.Replication.PgOutput.Messages.RelationMessage.Column.TypeModifier.get -> int
 Npgsql.Replication.PgOutput.Messages.RelationMessage.Columns.get -> System.ReadOnlyMemory<Npgsql.Replication.PgOutput.Messages.RelationMessage.Column>
 Npgsql.Replication.PgOutput.Messages.RelationMessage.Namespace.get -> string!

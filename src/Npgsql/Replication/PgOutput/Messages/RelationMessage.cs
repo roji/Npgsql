@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using Npgsql.BackendMessages;
 
 namespace Npgsql.Replication.PgOutput.Messages
 {
@@ -33,18 +34,23 @@ namespace Npgsql.Replication.PgOutput.Messages
         /// <summary>
         /// Relation columns
         /// </summary>
-        public IReadOnlyList<Column> Columns { get; private set; } = ReadOnlyArrayBuffer<Column>.Empty!;
+        public IReadOnlyList<Column> Columns => InternalColumns;
+
+        internal ReadOnlyArrayBuffer<Column> InternalColumns { get; private set; } = ReadOnlyArrayBuffer<Column>.Empty;
+
+        internal RowDescriptionMessage RowDescription { get; set; } = null!;
 
         internal RelationMessage Populate(
             NpgsqlLogSequenceNumber walStart, NpgsqlLogSequenceNumber walEnd, DateTime serverClock, uint? transactionXid, uint relationId, string ns,
-            string relationName, char relationReplicaIdentitySetting, ReadOnlyArrayBuffer<Column> columns)
+            string relationName, char relationReplicaIdentitySetting)
         {
             base.Populate(walStart, walEnd, serverClock, transactionXid);
+
             RelationId = relationId;
             Namespace = ns;
             RelationName = relationName;
             RelationReplicaIdentitySetting = relationReplicaIdentitySetting;
-            Columns = columns;
+
             return this;
         }
 
@@ -56,7 +62,9 @@ namespace Npgsql.Replication.PgOutput.Messages
 #endif
         {
             var clone = new RelationMessage();
-            clone.Populate(WalStart, WalEnd, ServerClock, TransactionXid, RelationId, Namespace, RelationName, RelationReplicaIdentitySetting, ((ReadOnlyArrayBuffer<Column>)Columns).Clone());
+            clone.Populate(WalStart, WalEnd, ServerClock, TransactionXid, RelationId, Namespace, RelationName, RelationReplicaIdentitySetting);
+            clone.InternalColumns = ((ReadOnlyArrayBuffer<Column>)Columns).Clone();
+            clone.RowDescription = RowDescription.Clone();
             return clone;
         }
 
@@ -65,7 +73,7 @@ namespace Npgsql.Replication.PgOutput.Messages
         /// </summary>
         public readonly struct Column
         {
-            internal Column(byte flags, string columnName, uint dataTypeId, int typeModifier)
+            internal Column(ColumnFlags flags, string columnName, uint dataTypeId, int typeModifier)
             {
                 Flags = flags;
                 ColumnName = columnName;
@@ -74,9 +82,9 @@ namespace Npgsql.Replication.PgOutput.Messages
             }
 
             /// <summary>
-            /// Flags for the column. Currently can be either 0 for no flags or 1 which marks the column as part of the key.
+            /// Flags for the column.
             /// </summary>
-            public byte Flags { get; }
+            public ColumnFlags Flags { get; }
 
             /// <summary>
             /// Name of the column.
@@ -92,6 +100,22 @@ namespace Npgsql.Replication.PgOutput.Messages
             /// Type modifier of the column (atttypmod).
             /// </summary>
             public int TypeModifier { get; }
+
+            /// <summary>
+            /// Flags for the column.
+            /// </summary>
+            public enum ColumnFlags
+            {
+                /// <summary>
+                /// No flags.
+                /// </summary>
+                None = 0,
+
+                /// <summary>
+                /// Marks the column as part of the key.
+                /// </summary>
+                PartOfKey = 1
+            }
         }
     }
 }
