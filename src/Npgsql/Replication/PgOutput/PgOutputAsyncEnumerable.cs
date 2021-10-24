@@ -60,8 +60,7 @@ namespace Npgsql.Replication.PgOutput
             _baseCancellationToken = cancellationToken;
             _walLocation = walLocation;
 
-            var readBuffer = _connection.Connector.ReadBuffer;
-            _insertMessage = new(readBuffer);
+            _insertMessage = new(_connection.Connector);
         }
 
         public IAsyncEnumerator<PgOutputReplicationMessage> GetAsyncEnumerator(CancellationToken cancellationToken = default)
@@ -229,8 +228,6 @@ namespace Npgsql.Replication.PgOutput
                         throw new InvalidOperationException(
                             $"Could not find previous Relation message for relation ID {relationId} when processing Insert message");
                     }
-
-                    Debug.Assert(numColumns == relation.RowDescription.Count);
 
                     yield return _insertMessage.Populate(
                         xLogData.WalStart, xLogData.WalEnd, xLogData.ServerClock, transactionXid, relation, numColumns);

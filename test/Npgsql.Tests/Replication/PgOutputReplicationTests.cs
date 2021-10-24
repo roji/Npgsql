@@ -109,32 +109,29 @@ namespace Npgsql.Tests.Replication
                     var insertMsg = await NextMessage<InsertMessage>(messages);
                     Assert.That(insertMsg.TransactionXid, IsStreaming ? Is.EqualTo(transactionXid) : Is.Null);
                     Assert.That(insertMsg.Relation, Is.SameAs(relationMsg));
-                    var columnEnumerator = insertMsg.NewRow.GetAsyncEnumerator();
-                    Assert.That(await columnEnumerator.MoveNextAsync(), Is.True);
+                    var reader = insertMsg.GetNewRow();
+                    Assert.That(reader.FieldCount, Is.EqualTo(2));
                     if (IsBinary)
-                        Assert.That(await columnEnumerator.Current.GetAsync<int>(), Is.EqualTo(1));
+                        Assert.That(await reader.GetFieldValueAsync<int>(0), Is.EqualTo(1));
                     else
-                        Assert.That(await columnEnumerator.Current.GetAsync<string>(), Is.EqualTo("1"));
-                    Assert.That(await columnEnumerator.MoveNextAsync(), Is.True);
-                    Assert.That(columnEnumerator.Current.IsDBNull, Is.False);
-                    Assert.That(await columnEnumerator.Current.GetAsync<string>(), Is.EqualTo("val1"));
-                    Assert.That(await columnEnumerator.MoveNextAsync(), Is.False);
+                        Assert.That(await reader.GetFieldValueAsync<string>(0), Is.EqualTo("1"));
+                    Assert.That(await reader.IsDBNullAsync(1), Is.False);
+                    Assert.That(await reader.GetFieldValueAsync<string>(1), Is.EqualTo("val1"));
+                    Assert.That(await reader.ReadAsync(), Is.False);
 
                     // Insert second value
                     insertMsg = await NextMessage<InsertMessage>(messages);
                     Assert.That(insertMsg.TransactionXid, IsStreaming ? Is.EqualTo(transactionXid) : Is.Null);
                     Assert.That(insertMsg.Relation, Is.SameAs(relationMsg));
-                    columnEnumerator = insertMsg.NewRow.GetAsyncEnumerator();
-                    Assert.That(await columnEnumerator.MoveNextAsync(), Is.True);
+                    reader = insertMsg.GetNewRow();
+                    Assert.That(reader.FieldCount, Is.EqualTo(2));
                     if (IsBinary)
-                        Assert.That(await columnEnumerator.Current.GetAsync<int>(), Is.EqualTo(2));
+                        Assert.That(await reader.GetFieldValueAsync<int>(0), Is.EqualTo(2));
                     else
-                        Assert.That(await columnEnumerator.Current.GetAsync<string>(), Is.EqualTo("2"));
-                    Assert.That(await columnEnumerator.MoveNextAsync(), Is.True);
-                    Assert.That(columnEnumerator.Current.IsDBNull, Is.True);
-                    Assert.That(async () => await columnEnumerator.Current.GetAsync<string>(),
-                        Throws.Exception.TypeOf<InvalidCastException>());
-                    Assert.That(await columnEnumerator.MoveNextAsync(), Is.False);
+                        Assert.That(await reader.GetFieldValueAsync<string>(0), Is.EqualTo("2"));
+                    Assert.That(await reader.IsDBNullAsync(1), Is.True);
+                    Assert.That(() => reader.GetFieldValueAsync<string>(1), Throws.Exception.TypeOf<InvalidCastException>());
+                    Assert.That(await reader.ReadAsync(), Is.False);
 
                     // Remaining inserts
                     for (var insertCount = 0; insertCount < 14998; insertCount++)

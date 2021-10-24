@@ -68,36 +68,31 @@ namespace Npgsql
         int _numColumns;
 
         /// <summary>
-        /// Records, for each column, its starting offset and length in the current row.
-        /// Used only in non-sequential mode.
+        /// Records, for each column, its starting offset and length in the current row. Used only in non-sequential mode.
         /// </summary>
         readonly List<(int Offset, int Length)> _columns = new();
 
         /// <summary>
-        /// The index of the column that we're on, i.e. that has already been parsed, is
-        /// is memory and can be retrieved. Initialized to -1, which means we're on the column
-        /// count (which comes before the first column).
+        /// The index of the column that we're on, i.e. that has already been parsed, is is memory and can be retrieved. Initialized to -1,
+        /// which means we're on the column count (which comes before the first column).
         /// </summary>
         int _column;
 
         /// <summary>
-        /// For streaming types (e.g. bytea), holds the byte length of the column.
-        /// Does not include the length prefix.
+        /// For streaming types (e.g. bytea), holds the byte length of the column. Does not include the length prefix.
         /// </summary>
         internal int ColumnLen;
 
         internal int PosInColumn;
 
         /// <summary>
-        /// The position in the buffer at which the current data row message ends.
-        /// Used only when the row is consumed non-sequentially.
+        /// The position in the buffer at which the current data row message ends. Used only when the row is consumed non-sequentially.
         /// </summary>
         int _dataMsgEnd;
 
         /// <summary>
-        /// Determines, if we can consume the row non-sequentially.
-        /// Mostly useful for a sequential mode, when the row is already in the buffer.
-        /// Should always be true for the non-sequential mode.
+        /// Determines if we can consume the row non-sequentially. Mostly useful for a sequential mode, when the row is already in the
+        /// buffer. Should always be true for the non-sequential mode.
         /// </summary>
         bool _canConsumeRowNonSequentially;
 
@@ -825,7 +820,7 @@ namespace Npgsql
         /// </summary>
         /// <param name="ordinal">The zero-based column ordinal.</param>
         /// <returns>The name of the specified column.</returns>
-        public override string GetName(int ordinal) => CheckRowDescriptionAndGetField(ordinal).Name;
+        public override string GetName(int ordinal) => GetField(ordinal).Name;
 
         /// <summary>
         /// Gets the number of columns in the current row.
@@ -1873,7 +1868,7 @@ namespace Npgsql
         /// The returned representation can be used to access various information about the field.
         /// </summary>
         /// <param name="ordinal">The zero-based column index.</param>
-        public PostgresType GetPostgresType(int ordinal) => CheckRowDescriptionAndGetField(ordinal).PostgresType;
+        public PostgresType GetPostgresType(int ordinal) => GetField(ordinal).PostgresType;
 
         /// <summary>
         /// Gets the data type information for the specified field.
@@ -1881,7 +1876,7 @@ namespace Npgsql
         /// (see <see cref="GetFieldType"/> for that).
         /// </summary>
         /// <param name="ordinal">The zero-based column index.</param>
-        public override string GetDataTypeName(int ordinal) => CheckRowDescriptionAndGetField(ordinal).TypeDisplayName;
+        public override string GetDataTypeName(int ordinal) => GetField(ordinal).TypeDisplayName;
 
         /// <summary>
         /// Gets the OID for the PostgreSQL type for the specified field, as it appears in the pg_type table.
@@ -1891,7 +1886,7 @@ namespace Npgsql
         /// debugging purposes.
         /// </remarks>
         /// <param name="ordinal">The zero-based column index.</param>
-        public uint GetDataTypeOID(int ordinal) => CheckRowDescriptionAndGetField(ordinal).TypeOID;
+        public uint GetDataTypeOID(int ordinal) => GetField(ordinal).TypeOID;
 
         /// <summary>
         /// Gets the data type of the specified column.
@@ -1900,7 +1895,7 @@ namespace Npgsql
         /// <returns>The data type of the specified column.</returns>
         public override Type GetFieldType(int ordinal)
             => Command.ObjectResultTypes?[ordinal]
-               ?? CheckRowDescriptionAndGetField(ordinal).FieldType;
+               ?? GetField(ordinal).FieldType;
 
         /// <summary>
         /// Returns the provider-specific field type of the specified column.
@@ -1909,7 +1904,7 @@ namespace Npgsql
         /// <returns>The Type object that describes the data type of the specified column.</returns>
         public override Type GetProviderSpecificFieldType(int ordinal)
         {
-            var fieldDescription = CheckRowDescriptionAndGetField(ordinal);
+            var fieldDescription = GetField(ordinal);
             return fieldDescription.Handler.GetProviderSpecificFieldType(fieldDescription);
         }
 
@@ -2288,7 +2283,7 @@ namespace Npgsql
         /// (for operations which work in SchemaOnly mode.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        FieldDescription CheckRowDescriptionAndGetField(int column)
+        FieldDescription GetField(int column)
         {
             if (RowDescription == null)
                 throw new InvalidOperationException("No resultset is currently being traversed");

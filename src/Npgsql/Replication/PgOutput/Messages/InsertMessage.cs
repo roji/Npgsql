@@ -16,6 +16,8 @@ namespace Npgsql.Replication.PgOutput.Messages
     /// </summary>
     public sealed class InsertMessage : TransactionalMessage
     {
+        readonly ReplicationDataReader _reader;
+
         RelationMessage _relation = null!;
         RowState _rowState;
 
@@ -32,17 +34,36 @@ namespace Npgsql.Replication.PgOutput.Messages
             => _relation ?? throw new InvalidOperationException("The relation for this message could not be resolved");
 
         /// <summary>
-        /// Columns representing the new row.
+        /// Returns a sequential <see cref="ReplicationDataReader" /> that can be used to access the column data of the newly inserted row.
         /// </summary>
-        public IAsyncEnumerable<ReplicationValue> NewRow => _tupleEnumerable;
+        /// <remarks>
+        /// The returned <see cref="ReplicationDataReader" /> is sequential (does not buffer), and must therefore be traversed from first
+        /// to last column; seeking back and re-reading columns is not supported.
+        /// </remarks>
+        public ReplicationDataReader GetNewRow()
+        {
+            _reader.Reset(_relation.RowDescription);
+            return _reader;
+        }
 
-        readonly TupleEnumerable _tupleEnumerable;
+        /// <summary>
+        /// Returns a buffered <see cref="ReplicationDataReader" /> that can be used to access the column data of the newly inserted row.
+        /// </summary>
+        /// <remarks>
+        /// The returned <see cref="ReplicationDataReader" /> is buffered. While this allow accessing columns in random order, it may also
+        /// use up considerable memory if big columns are involved.
+        /// </remarks>
+        public ValueTask<ReplicationDataReader> GetNewRowBuffered(CancellationToken cancellationToken)
+        {
+            _reader.Reset(_relation.RowDescription);
+            return _reader.BufferRow();
+        }
 
         /// <summary>
         /// Creates a new instance of <see cref="InsertMessage" />.
         /// </summary>
-        internal InsertMessage(NpgsqlReadBuffer readBuffer)
-            => _tupleEnumerable = new(this, readBuffer);
+        internal InsertMessage(NpgsqlConnector connector)
+            => _reader = new(this, connector);
 
         internal InsertMessage Populate(
             NpgsqlLogSequenceNumber walStart, NpgsqlLogSequenceNumber walEnd, DateTime serverClock, uint? transactionXid,
@@ -52,13 +73,12 @@ namespace Npgsql.Replication.PgOutput.Messages
 
             _relation = relation;
             _rowState = RowState.NotRead;
-            _tupleEnumerable.Reset(numColumns, relation.RowDescription);
 
             return this;
         }
 
         internal Task Consume(CancellationToken cancellationToken)
-            => _tupleEnumerable.Consume(cancellationToken);
+            => _reader.ReadAsync(cancellationToken);
 
         /// <inheritdoc />
 #if NET5_0_OR_GREATER
