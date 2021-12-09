@@ -246,7 +246,15 @@ namespace Npgsql
                     // and updating statistics. If not, CompleteRewrite is scheduled to run later, when the async
                     // operations complete, so skip it and continue.
                     if (writtenSynchronously)
+                    {
+                        var task = connector.WriteSync(async: true, CancellationToken.None);
+                        if (!task.IsCompletedSuccessfully)
+                        {
+                            throw new Exception("Sad panda");
+                        }
+
                         Flush(connector, ref stats);
+                    }
                 }
                 catch (Exception ex)
                 {

@@ -1002,10 +1002,9 @@ GROUP BY pg_proc.proargnames, pg_proc.proargtypes, pg_proc.proallargtypes, pg_pr
                         pStatement.LastUsed = DateTime.UtcNow;
                 }
 
-                await connector.WriteSync(async, cancellationToken);
-
-                if (flush)
-                    await connector.Flush(async, cancellationToken);
+                // await connector.WriteSync(async, cancellationToken);
+                // if (flush)
+                //     await connector.Flush(async, cancellationToken);
             }
 
             async Task WriteExecuteSchemaOnly(NpgsqlConnector connector, bool async, bool flush, CancellationToken cancellationToken)
@@ -1299,7 +1298,7 @@ GROUP BY pg_proc.proargnames, pg_proc.proargtypes, pg_proc.proallargtypes, pg_pr
                     // whereas it should only be scoped to the Execute method.
                     connector.StartUserAction(ConnectorState.Executing, this, CancellationToken.None);
 
-                    Task? sendTask;
+                    // Task? sendTask;
 
                     try
                     {
@@ -1383,13 +1382,16 @@ GROUP BY pg_proc.proargnames, pg_proc.proargtypes, pg_proc.proallargtypes, pg_pr
                         // in a special synchronization context to prevents a dependency on the thread pool (which would also trigger
                         // deadlocks).
                         BeginSend(connector);
-                        sendTask = Write(connector, async, flush: true, CancellationToken.None);
+                        await Write(connector, async, flush: false, CancellationToken.None);
+                        await connector.WriteSync(async, cancellationToken);
+                        await connector.Flush(async, cancellationToken);
+
 
                         // The following is a hack. It raises an exception if one was thrown in the first phases
                         // of the send (i.e. in parts of the send that executed synchronously). Exceptions may
                         // still happen later and aren't properly handled. See #1323.
-                        if (sendTask.IsFaulted)
-                            sendTask.GetAwaiter().GetResult();
+                        // if (sendTask.IsFaulted)
+                        //     sendTask.GetAwaiter().GetResult();
                     }
                     catch
                     {
@@ -1399,7 +1401,7 @@ GROUP BY pg_proc.proargnames, pg_proc.proargtypes, pg_proc.proallargtypes, pg_pr
 
                     // TODO: DRY the following with multiplexing, but be careful with the cancellation registration...
                     var reader = connector.DataReader;
-                    reader.Init(this, behavior, InternalBatchCommands, sendTask);
+                    reader.Init(this, behavior, InternalBatchCommands, null);
                     connector.CurrentReader = reader;
                     if (async)
                         await reader.NextResultAsync(cancellationToken);
