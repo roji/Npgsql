@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Channels;
@@ -51,8 +52,9 @@ sealed class MultiplexingDataSource : PoolingDataSource
         NpgsqlConnectionStringBuilder settings,
         string connString,
         NpgsqlLoggingConfiguration loggingConfiguration,
+        List<NpgsqlPreparedStatementHandle> preparedStatements,
         MultiHostDataSource? parentPool = null)
-        : base(settings, connString, loggingConfiguration, parentPool)
+        : base(settings, connString, loggingConfiguration, preparedStatements, parentPool)
     {
         Debug.Assert(Settings.Multiplexing);
 

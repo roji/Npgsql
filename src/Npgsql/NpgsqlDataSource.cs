@@ -24,6 +24,7 @@ public abstract class NpgsqlDataSource : DbDataSource
     internal NpgsqlConnectionStringBuilder Settings { get; }
 
     internal NpgsqlLoggingConfiguration LoggingConfiguration { get; }
+    internal List<NpgsqlPreparedStatementHandle> PreparedStatements { get; }
 
     // Note that while the dictionary is protected by locking, we assume that the lists it contains don't need to be
     // (i.e. access to connectors of a specific transaction won't be concurrent)
@@ -37,7 +38,8 @@ public abstract class NpgsqlDataSource : DbDataSource
     internal NpgsqlDataSource(
         NpgsqlConnectionStringBuilder settings,
         string connectionString,
-        NpgsqlLoggingConfiguration loggingConfiguration)
+        NpgsqlLoggingConfiguration loggingConfiguration,
+        List<NpgsqlPreparedStatementHandle> preparedStatements)
     {
         Settings = settings;
         ConnectionString = settings.PersistSecurityInfo
@@ -45,6 +47,11 @@ public abstract class NpgsqlDataSource : DbDataSource
             : settings.ToStringWithoutPassword();
 
         LoggingConfiguration = loggingConfiguration;
+
+        foreach (var preparedStatement in preparedStatements)
+            preparedStatement.DataSource = this;
+
+        PreparedStatements = preparedStatements;
     }
 
     /// <summary>

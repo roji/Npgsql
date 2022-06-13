@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using NpgsqlTypes;
 using NUnit.Framework;
@@ -715,6 +714,18 @@ public class PrepareTests: TestBase
 
         Assert.That(() => cmd.Prepare(), Throws.Exception.TypeOf<NotSupportedException>());
         Assert.That(() => conn.UnprepareAll(), Throws.Exception.TypeOf<NotSupportedException>());
+    }
+
+    [Test]
+    public async Task DataSource_Prepare()
+    {
+        var dataSourceBuilder = new NpgsqlDataSourceBuilder(ConnectionString);
+        var handle = dataSourceBuilder.Prepare("SELECT 1");
+        await using var dataSource = dataSourceBuilder.GetDataSource();
+
+        await using var conn = await dataSource.OpenConnectionAsync();
+        await using var cmd = new NpgsqlCommand("SELECT 1", conn);
+        Assert.That(await cmd.ExecuteScalarAsync(), Is.EqualTo(1));
     }
 
     NpgsqlConnection OpenConnectionAndUnprepare(string? connectionString = null)

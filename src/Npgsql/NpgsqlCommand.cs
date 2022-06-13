@@ -19,6 +19,8 @@ using Npgsql.Internal;
 
 namespace Npgsql;
 
+#pragma warning disable RS0016
+
 /// <summary>
 /// Represents a SQL statement or function (stored procedure) to execute
 /// against a PostgreSQL database. This class cannot be inherited.
@@ -105,6 +107,15 @@ public class NpgsqlCommand : DbCommand, ICloneable, IComponent
     // ReSharper disable once IntroduceOptionalParameters.Global
     public NpgsqlCommand(string? cmdText) : this(cmdText, null, null) {}
 
+    // TODO: Shit - adding this is a breaking change since it's ambiguous with the string? ctor..
+    /// <summary>
+    /// Initializes a new instance of the <see cref="NpgsqlCommand"/> class with a prepared statement handle obtained from
+    /// <see cref="NpgsqlDataSourceBuilder.Prepare" />.
+    /// </summary>
+    public NpgsqlCommand(NpgsqlPreparedStatementHandle preparedStatementHandle, NpgsqlConnection? connection)
+        : this((string?)null, connection)
+        => PreparedStatementHandle = preparedStatementHandle;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="NpgsqlCommand"/> class with the text of the query and a
     /// <see cref="NpgsqlConnection"/>.
@@ -160,7 +171,7 @@ public class NpgsqlCommand : DbCommand, ICloneable, IComponent
         => _connector = connector;
 
     internal static NpgsqlCommand CreateCachedCommand(NpgsqlConnection connection)
-        => new(null, connection) { IsCached = true };
+        => new((string?)null, connection) { IsCached = true };
 
     #endregion Constructors
 
@@ -279,6 +290,11 @@ public class NpgsqlCommand : DbCommand, ICloneable, IComponent
             }
         }
     }
+
+    /// <summary>
+    /// A prepared statement handle obtained from <see cref="NpgsqlDataSourceBuilder.Prepare" />.
+    /// </summary>
+    public NpgsqlPreparedStatementHandle? PreparedStatementHandle { get; set; }
 
     /// <summary>
     /// Returns whether this query will execute as a prepared (compiled) query.

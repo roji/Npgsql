@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Microsoft.Extensions.Logging;
 
 namespace Npgsql;
@@ -10,6 +11,9 @@ public class NpgsqlDataSourceBuilder
 {
     ILoggerFactory? _loggerFactory;
     bool _sensitiveDataLoggingEnabled;
+
+    readonly List<NpgsqlPreparedStatementHandle> _preparedStatements = new();
+    int _preparedStatementIndex;
 
     /// <summary>
     /// A connection string builder that can be used to configured the connection string on the builder.
@@ -51,6 +55,31 @@ public class NpgsqlDataSourceBuilder
         return this;
     }
 
+#pragma warning disable RS0016
+    /// <summary>
+    /// Registers the given SQL and parameter types to be prepared on all connections handed out by this data source.
+    /// A prepared statement will automatically be created whenever a physical connection is opened, and the handle returned by this
+    /// method can be used on <see cref="NpgsqlCommand" /> to execute that statement.
+    /// </summary>
+    /// <returns>
+    /// A prepared statement handle that can later be passed to <see cref="NpgsqlCommand" /> for execution.
+    /// TODO: Adjust according to final API
+    /// </returns>
+    // TODO: Consider making this return NpgsqlDataSourceBuilder and return the handle via an out param?
+    public NpgsqlPreparedStatementHandle Prepare(string sql)
+    {
+        var preparedStatement = new NpgsqlPreparedStatementHandle("_ds" + ++_preparedStatementIndex, sql);
+        _preparedStatements.Add(preparedStatement);
+        return preparedStatement;
+    }
+
+    // TODO: Need overload with parameter types (for ambiguous SQL). But what does it accept:
+    // 1. (params) array of NpgsqlDbType
+    // 2. (params) array of DataTypeName
+    // 3. array of NpgsqlParameter, allowing mixing and matching?
+
+#pragma warning restore RS0016
+
     /// <summary>
     /// Builds and returns an <see cref="NpgsqlDataSource" /> which is ready for use.
     /// </summary>
@@ -70,13 +99,13 @@ public class NpgsqlDataSourceBuilder
                 throw new NotSupportedException("Multiplexing is not supported with multiple hosts");
             if (ConnectionStringBuilder.ReplicationMode != ReplicationMode.Off)
                 throw new NotSupportedException("Replication is not supported with multiple hosts");
-            return new MultiHostDataSource(ConnectionStringBuilder, connectionString, loggingConfiguration);
+            return new MultiHostDataSource(ConnectionStringBuilder, connectionString, loggingConfiguration, _preparedStatements);
         }
 
         return ConnectionStringBuilder.Multiplexing
-            ? new MultiplexingDataSource(ConnectionStringBuilder, connectionString, loggingConfiguration)
+            ? new MultiplexingDataSource(ConnectionStringBuilder, connectionString, loggingConfiguration, _preparedStatements)
             : ConnectionStringBuilder.Pooling
-                ? new PoolingDataSource(ConnectionStringBuilder, connectionString, loggingConfiguration)
-                : new UnpooledDataSource(ConnectionStringBuilder, connectionString, loggingConfiguration);
+                ? new PoolingDataSource(ConnectionStringBuilder, connectionString, loggingConfiguration, _preparedStatements)
+                : new UnpooledDataSource(ConnectionStringBuilder, connectionString, loggingConfiguration, _preparedStatements);
     }
 }

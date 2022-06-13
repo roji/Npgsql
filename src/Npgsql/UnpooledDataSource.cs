@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,8 +10,12 @@ namespace Npgsql;
 
 sealed class UnpooledDataSource : NpgsqlDataSource
 {
-    public UnpooledDataSource(NpgsqlConnectionStringBuilder settings, string connString, NpgsqlLoggingConfiguration loggingConfiguration)
-        : base(settings, connString, loggingConfiguration)
+    public UnpooledDataSource(
+        NpgsqlConnectionStringBuilder settings,
+        string connString,
+        NpgsqlLoggingConfiguration loggingConfiguration,
+        List<NpgsqlPreparedStatementHandle> preparedStatements)
+        : base(settings, connString, loggingConfiguration, preparedStatements)
     {
     }
 

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
@@ -79,8 +80,9 @@ class PoolingDataSource : NpgsqlDataSource
         NpgsqlConnectionStringBuilder settings,
         string connString,
         NpgsqlLoggingConfiguration loggingConfiguration,
+        List<NpgsqlPreparedStatementHandle> preparedStatements,
         MultiHostDataSource? parentPool = null)
-        : base(settings, connString, loggingConfiguration)
+        : base(settings, connString, loggingConfiguration, preparedStatements)
     {
         if (settings.MaxPoolSize < settings.MinPoolSize)
             throw new ArgumentException($"Connection can't have 'Max Pool Size' {settings.MaxPoolSize} under 'Min Pool Size' {settings.MinPoolSize}");
