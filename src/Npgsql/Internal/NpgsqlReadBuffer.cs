@@ -2,7 +2,6 @@
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
@@ -77,6 +76,7 @@ public sealed partial class NpgsqlReadBuffer : IDisposable
 
     internal int ReadPosition { get; set; }
     internal int ReadBytesLeft => FilledBytes - ReadPosition;
+    internal PgReader PgReader { get; }
 
     internal readonly byte[] Buffer;
     internal int FilledBytes;
@@ -122,6 +122,7 @@ public sealed partial class NpgsqlReadBuffer : IDisposable
 
         TextEncoding = textEncoding;
         RelaxedTextEncoding = relaxedTextEncoding;
+        PgReader = new PgReader(this);
     }
 
     #endregion

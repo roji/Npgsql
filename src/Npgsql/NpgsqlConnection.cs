@@ -1228,7 +1228,7 @@ public sealed class NpgsqlConnection : DbConnection, ICloneable, IComponent
     {
         using (NoSynchronizationContextScope.Enter())
             return BeginBinaryExport(copyToCommand, async: true, cancellationToken);
-    } 
+    }
 
     async Task<NpgsqlBinaryExporter> BeginBinaryExport(string copyToCommand, bool async, CancellationToken cancellationToken = default)
     {
