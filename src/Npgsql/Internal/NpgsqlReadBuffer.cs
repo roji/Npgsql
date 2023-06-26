@@ -526,7 +526,7 @@ public sealed partial class NpgsqlReadBuffer : IDisposable
             ReadPosition += readFromBuffer;
             return new ValueTask<int>(readFromBuffer);
         }
-        
+
         if (output.Length == 0)
             return new ValueTask<int>(0);
 
@@ -563,7 +563,7 @@ public sealed partial class NpgsqlReadBuffer : IDisposable
     {
         if (_preparedTextReader is not { IsDisposed: true })
             _preparedTextReader = new PreparedTextReader();
-        
+
         _preparedTextReader.Init(str, (ColumnStream)stream);
         return _preparedTextReader;
     }
