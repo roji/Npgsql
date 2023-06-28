@@ -1435,7 +1435,7 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
 
         length = Math.Min(length, ColumnLen - dataOffset2);
 
-        var reader = Buffer.PgReader.Init(new ArraySegment<byte>(buffer, bufferOffset, length), ColumnLen);
+        var reader = Buffer.PgReader.Init(new ArraySegment<byte>(buffer, bufferOffset, length), ColumnLen, field.Format);
         // TODO actually make this work in the byte[] converter.
         var result = info.AsObject
             ? (byte[])info.Converter.ReadAsObject(reader)
@@ -1630,7 +1630,7 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
         Debug.Assert(info.BufferRequirement is { Kind: SizeKind.Exact, Value: 0 });
         var reader = Buffer.PgReader.Init(async
             ? await GetStreamInternal(field, ordinal, true, cancellationToken)
-            : GetStreamInternal(field, ordinal, false, CancellationToken.None).Result, ColumnLen);
+            : GetStreamInternal(field, ordinal, false, CancellationToken.None).Result, ColumnLen, field.Format);
         return (TextReader)info.Converter.ReadAsObject(reader);
     }
 
@@ -1701,7 +1701,7 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
 
         // We don't handle exceptions or update PosInColumn
         // With non-sequential reads we always just move to the start/end of the column
-        var reader = Buffer.PgReader.Init(ColumnLen);
+        var reader = Buffer.PgReader.Init(ColumnLen, field.Format);
         reader.BufferData(info.BufferRequirement);
         return info.AsObject
             ? (T)info.Converter.ReadAsObject(reader)
@@ -1733,7 +1733,7 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
         var position = Buffer.ReadPosition;
         try
         {
-            var reader = Buffer.PgReader.Init(ColumnLen);
+            var reader = Buffer.PgReader.Init(ColumnLen, field.Format);
             if (async)
             {
                 await reader.BufferDataAsync(info.BufferRequirement, cancellationToken);
@@ -1795,7 +1795,7 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
         var position = Buffer.ReadPosition;
         try
         {
-            var reader = Buffer.PgReader.Init(ColumnLen);
+            var reader = Buffer.PgReader.Init(ColumnLen, field.Format);
             reader.BufferData(info.BufferRequirement);
             result = info.Converter.ReadAsObject(reader);
         }
