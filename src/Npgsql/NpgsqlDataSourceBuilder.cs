@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Npgsql.Internal;
 using Npgsql.TypeMapping;
+using Npgsql.TypeMapping.Resolvers;
 using NpgsqlTypes;
 
 namespace Npgsql;
@@ -315,5 +316,6 @@ public sealed class NpgsqlDataSourceBuilder : INpgsqlTypeMapper
         _internalBuilder.AddDefaultTypeInfoResolver(new RangeTypeInfoResolver());
         _internalBuilder.AddDefaultTypeInfoResolver(new RecordTypeInfoResolver());
         _internalBuilder.AddDefaultTypeInfoResolver(new FullTextSearchTypeInfoResolver());
+        _internalBuilder.AddDefaultTypeInfoResolver(new NetworkTypeInfoResolver());
     }
 }

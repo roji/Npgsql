@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using System.Transactions;
 using Microsoft.Extensions.Logging;
 using Npgsql.Internal;
+using Npgsql.Internal.Resolvers;
 using Npgsql.Properties;
 using Npgsql.TypeMapping;
 using Npgsql.Util;

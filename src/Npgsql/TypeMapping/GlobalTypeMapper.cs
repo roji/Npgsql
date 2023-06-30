@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using Npgsql.Internal;
+using Npgsql.Internal.Resolvers;
 using Npgsql.PostgresTypes;
+using Npgsql.TypeMapping.Resolvers;
 using Npgsql.Util;
 using NpgsqlTypes;
 
@@ -24,7 +26,11 @@ public sealed class GlobalTypeMapper : INpgsqlTypeMapper
             PortableTypeIds = true,
             // Irrelevant but required.
             TextEncoding = PGUtil.UTF8Encoding,
-            TypeInfoResolver = AdoTypeInfoResolver.Instance
+            TypeInfoResolver = new TypeInfoResolverChain(new IPgTypeInfoResolver[]
+            {
+                AdoTypeInfoResolver.Instance,
+                NetworkTypeInfoResolver.Instance
+            })
         };
         Reset();
     }
