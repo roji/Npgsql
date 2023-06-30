@@ -72,23 +72,17 @@ public abstract class PgConverter
 
     internal abstract Type TypeToConvert { get; }
 
-    internal bool IsDbNullValueAsObject([NotNullWhen(false)] object? value)
-    {
-        return DbNullPredicateKind switch
+    internal bool IsDbNullAsObject([NotNullWhen(false)] object? value)
+        => DbNullPredicateKind switch
         {
             DbNullPredicate.Null => value is null,
             DbNullPredicate.None => false,
             DbNullPredicate.PolymorphicNull => value is null or DBNull,
-            _ => Custom()
+            // We do the null check to keep the NotNullWhen(false) invariant.
+            _ => IsDbNullValueAsObject(value) || (value is null && ThrowInvalidNullValue())
         };
 
-        // We do the null check to keep the NotNullWhen(false) invariant.
-        bool Custom() => IsDbNullAsObject(value) || (value is null
-            ? throw new ArgumentNullException("Null value given for non-nullable type converter")
-            : false);
-    }
-
-    private protected abstract bool IsDbNullAsObject(object? value);
+    private protected abstract bool IsDbNullValueAsObject(object? value);
 
     internal abstract Size GetSizeAsObject(SizeContext context, object value, ref object? writeState);
 
@@ -108,7 +102,7 @@ public abstract class PgConverter
     // Shared sync/async abstract to reduce virtual method table size overhead and code size for each NpgsqlConverter<T> instantiation.
     private protected abstract ValueTask WriteAsObject(bool async, PgWriter writer, object value, CancellationToken cancellationToken);
 
-    static DbNullPredicate InferDbNullPredicate(Type type, bool isNullDefaultValue)
+    private protected static DbNullPredicate InferDbNullPredicate(Type type, bool isNullDefaultValue)
         => type == typeof(object) || type == typeof(DBNull)
             ? DbNullPredicate.PolymorphicNull
             : isNullDefaultValue
@@ -130,6 +124,9 @@ public abstract class PgConverter
     [DoesNotReturn]
     private protected static void ThrowIORequired()
         => throw new InvalidOperationException("Fixed sizedness for format not respected, expected no IO to be required.");
+
+    private protected static bool ThrowInvalidNullValue()
+        => throw new ArgumentNullException("Null value given for non-nullable type converter");
 }
 
 public abstract class PgConverter<T> : PgConverter
@@ -137,27 +134,22 @@ public abstract class PgConverter<T> : PgConverter
     private protected PgConverter(bool customDbNullPredicate)
         : base(typeof(T), default(T) is null, customDbNullPredicate) { }
 
-    protected virtual bool IsDbNull(T? value) => throw new NotImplementedException();
+    protected virtual bool IsDbNullValue(T? value) => throw new NotImplementedException();
 
     // Object null semantics as follows, if T is a struct (so excluding nullable) report false for null values, don't throw on the cast.
     // As a result this creates symmetry with IsDbNull when we're dealing with a struct T, as it cannot be passed null at all.
-    private protected override bool IsDbNullAsObject(object? value) => (default(T) is null || value is not null) && IsDbNull((T?)value);
+    private protected override bool IsDbNullValueAsObject(object? value)
+        => (default(T) is null || value is not null) && IsDbNullValue(DownCast(value));
 
-    public bool IsDbNullValue([NotNullWhen(false)] T? value)
-    {
-        return DbNullPredicateKind switch
+    public bool IsDbNull([NotNullWhen(false)] T? value)
+        => DbNullPredicateKind switch
         {
             DbNullPredicate.Null => value is null,
             DbNullPredicate.None => false,
             DbNullPredicate.PolymorphicNull => value is null or DBNull,
-            _ => Custom()
+            // We do the null check to keep the NotNullWhen(false) invariant.
+            _ => IsDbNullValue(value) || (value is null && ThrowInvalidNullValue())
         };
-
-        // We do the null check to keep the NotNullWhen(false) invariant.
-        bool Custom() => IsDbNull(value) || (value is null
-            ? throw new ArgumentNullException("Null value given for non-nullable type converter")
-            : false);
-    }
 
     public abstract T Read(PgReader reader);
     public abstract ValueTask<T> ReadAsync(PgReader reader, CancellationToken cancellationToken = default);
@@ -169,8 +161,12 @@ public abstract class PgConverter<T> : PgConverter
     internal sealed override Type TypeToConvert => typeof(T);
 
     // Make an allowance here for fixed size queries which won't know the default value of T.
-    internal sealed override Size GetSizeAsObject(SizeContext context, object value, ref object? writeState)
-        => GetSize(context, ReferenceEquals(value, null) ? default! : (T)value, ref writeState);
+    internal sealed override Size GetSizeAsObject(SizeContext context, object? value, ref object? writeState)
+        => GetSize(context, value is null ? default! : DownCast(value), ref writeState);
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    [return: NotNullIfNotNull(nameof(value))]
+    static T? DownCast(object? value) => (T?)value;
 }
 
 // Using a function pointer here is safe against assembly unloading as the instance reference that the static pointer method lives on is

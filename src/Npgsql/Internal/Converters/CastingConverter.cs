@@ -16,7 +16,7 @@ sealed class CastingConverter<T> : PgConverter<T>
         : base(effectiveConverter.DbNullPredicateKind is DbNullPredicate.Custom)
         => _effectiveConverter = effectiveConverter;
 
-    protected override bool IsDbNull(T? value) => _effectiveConverter.IsDbNullValueAsObject(value);
+    protected override bool IsDbNullValue(T? value) => _effectiveConverter.IsDbNullAsObject(value);
 
     public override bool CanConvert(DataFormat format, out BufferingRequirement bufferingRequirement)
         => _effectiveConverter.CanConvert(format, out bufferingRequirement);

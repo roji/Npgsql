@@ -19,8 +19,8 @@ sealed class NullableConverter<T> : PgConverter<T?> where T : struct
         : base(effectiveConverter.DbNullPredicateKind is DbNullPredicate.Custom)
         => _effectiveConverter = effectiveConverter;
 
-    protected override bool IsDbNull(T? value)
-        => value is null || _effectiveConverter.IsDbNullValue(value.GetValueOrDefault());
+    protected override bool IsDbNullValue(T? value)
+        => value is null || _effectiveConverter.IsDbNull(value.GetValueOrDefault());
 
     public override bool CanConvert(DataFormat format, out BufferingRequirement bufferingRequirement)
         => _effectiveConverter.CanConvert(format, out bufferingRequirement);
