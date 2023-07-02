@@ -29,7 +29,7 @@ public abstract class TestBase
 
     #region Type testing
 
-    public async Task<T> AssertType<T>(
+    public async Task AssertType<T>(
         T value,
         string sqlLiteral,
         string pgTypeName,
@@ -43,12 +43,12 @@ public abstract class TestBase
         Func<T, T, bool>? comparer = null)
     {
         await using var connection = await OpenConnectionAsync();
-        return await AssertType(
+        await AssertType(
             connection, value, sqlLiteral, pgTypeName, npgsqlDbType, dbType, inferredDbType, isDefaultForReading, isDefaultForWriting,
             isDefault, isNpgsqlDbTypeInferredFromClrType, comparer);
     }
 
-    public async Task<T> AssertType<T>(
+    public async Task AssertType<T>(
         NpgsqlDataSource dataSource,
         T value,
         string sqlLiteral,
@@ -63,12 +63,11 @@ public abstract class TestBase
         Func<T, T, bool>? comparer = null)
     {
         await using var connection = await dataSource.OpenConnectionAsync();
-
-        return await AssertType(connection, value, sqlLiteral, pgTypeName, npgsqlDbType, dbType, inferredDbType, isDefaultForReading,
+        await AssertType(connection, value, sqlLiteral, pgTypeName, npgsqlDbType, dbType, inferredDbType, isDefaultForReading,
             isDefaultForWriting, isDefault, isNpgsqlDbTypeInferredFromClrType, comparer);
     }
 
-    public async Task<T> AssertType<T>(
+    public async Task AssertType<T>(
         NpgsqlConnection connection,
         T value,
         string sqlLiteral,
@@ -86,13 +85,13 @@ public abstract class TestBase
             isDefaultForReading = isDefaultForWriting = isDefault.Value;
 
         await AssertTypeWrite(connection, () => value, sqlLiteral, pgTypeName, npgsqlDbType, dbType, inferredDbType, isDefaultForWriting, isNpgsqlDbTypeInferredFromClrType);
-        return await AssertTypeRead(connection, sqlLiteral, pgTypeName, value, isDefaultForReading, comparer);
+        await AssertTypeRead(connection, sqlLiteral, pgTypeName, value, isDefaultForReading, comparer);
     }
 
-    public async Task<T> AssertTypeRead<T>(string sqlLiteral, string pgTypeName, T expected, bool isDefault = true)
+    public async Task AssertTypeRead<T>(string sqlLiteral, string pgTypeName, T expected, bool isDefault = true)
     {
         await using var connection = await OpenConnectionAsync();
-        return await AssertTypeRead(connection, sqlLiteral, pgTypeName, expected, isDefault);
+        await AssertTypeRead(connection, sqlLiteral, pgTypeName, expected, isDefault);
     }
 
     public async Task AssertTypeWrite<T>(
@@ -138,7 +137,7 @@ public abstract class TestBase
         await AssertTypeWrite(connection, valueFactory, expectedSqlLiteral, pgTypeName, npgsqlDbType, dbType, inferredDbType, isDefault, isNpgsqlDbTypeInferredFromClrType);
     }
 
-    internal static async Task<T> AssertTypeRead<T>(
+    static async Task AssertTypeRead<T>(
         NpgsqlConnection connection,
         string sqlLiteral,
         string pgTypeName,
@@ -148,34 +147,48 @@ public abstract class TestBase
     {
         if (sqlLiteral.Contains('\''))
             sqlLiteral = sqlLiteral.Replace("'", "''");
+        sqlLiteral = $"'{sqlLiteral}'";
 
-        await using var cmd = new NpgsqlCommand($"SELECT '{sqlLiteral}'::{pgTypeName}", connection);
-        await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SequentialAccess);
-        await reader.ReadAsync();
+        await AssertTypeReadCore(connection, sqlLiteral, pgTypeName, expected, isDefault, comparer);
+        await AssertTypeReadCore(connection, $"ARRAY[{sqlLiteral}]", pgTypeName + "[]", new[] { expected }, isDefault, null /*TODO*/);
 
-        var truncatedSqlLiteral = sqlLiteral.Length > 40 ? sqlLiteral[..40] + "..." : sqlLiteral;
-
-        var dataTypeName = reader.GetDataTypeName(0);
-        var dotIndex = dataTypeName.IndexOf('.');
-        if (dotIndex > -1 && dataTypeName.Substring(0, dotIndex) is "pg_catalog" or "public")
-            dataTypeName = dataTypeName.Substring(dotIndex + 1);
-
-        Assert.That(dataTypeName, Is.EqualTo(pgTypeName),
-            $"Got wrong result from GetDataTypeName when reading '{truncatedSqlLiteral}'");
-
-        if (isDefault)
+        static async Task AssertTypeReadCore<T2>(
+            NpgsqlConnection connection,
+            string sqlLiteral,
+            string pgTypeName,
+            T2 expected,
+            bool isDefault = true,
+            Func<T2, T2, bool>? comparer = null)
         {
-            // For arrays, GetFieldType always returns typeof(Array), since PG arrays can have arbitrary dimensionality
-            Assert.That(reader.GetFieldType(0), Is.EqualTo(dataTypeName.EndsWith("[]") ? typeof(Array) : typeof(T)),
-                $"Got wrong result from GetFieldType when reading '{truncatedSqlLiteral}'");
+            await using var cmd = new NpgsqlCommand($"SELECT {sqlLiteral}::{pgTypeName}", connection);
+            await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SequentialAccess);
+            await reader.ReadAsync();
+
+            var truncatedSqlLiteral = sqlLiteral.Length > 40 ? sqlLiteral[..40] + "..." : sqlLiteral;
+
+            var dataTypeName = reader.GetDataTypeName(0);
+            var dotIndex = dataTypeName.IndexOf('.');
+            if (dotIndex > -1 && dataTypeName.Substring(0, dotIndex) is "pg_catalog" or "public")
+                dataTypeName = dataTypeName.Substring(dotIndex + 1);
+
+            Assert.That(dataTypeName, Is.EqualTo(pgTypeName),
+                $"Got wrong result from GetDataTypeName when reading '{truncatedSqlLiteral}'");
+
+            if (isDefault)
+            {
+                // // For arrays, GetFieldType always returns typeof(Array), since PG arrays can have arbitrary dimensionality
+                // Assert.That(reader.GetFieldType(0), Is.EqualTo(dataTypeName.EndsWith("[]") ? typeof(Array) : typeof(T)),
+                //     $"Got wrong result from GetFieldType when reading '{truncatedSqlLiteral}'");
+
+                Assert.That(reader.GetFieldType(0), Is.SameAs(typeof(T2)),
+                    $"Got wrong result from GetFieldType when reading '{truncatedSqlLiteral}'");
+            }
+
+            var actual = isDefault ? (T2)reader.GetValue(0) : reader.GetFieldValue<T2>(0);
+
+            Assert.That(actual, comparer is null ? Is.EqualTo(expected) : Is.EqualTo(expected).Using(new SimpleComparer<T2>(comparer)),
+                $"Got wrong result from GetFieldValue value when reading '{truncatedSqlLiteral}'");
         }
-
-        var actual = isDefault ? (T)reader.GetValue(0) : reader.GetFieldValue<T>(0);
-
-        Assert.That(actual, comparer is null ? Is.EqualTo(expected) : Is.EqualTo(expected).Using(new SimpleComparer<T>(comparer)),
-            $"Got wrong result from GetFieldValue value when reading '{truncatedSqlLiteral}'");
-
-        return actual;
     }
 
     internal static async Task AssertTypeWrite<T>(

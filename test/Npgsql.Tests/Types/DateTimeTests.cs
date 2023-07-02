@@ -242,17 +242,14 @@ public class DateTimeTests : TestBase
 
     [Test]
     public async Task Timestamptz_as_DateTimeOffset_utc()
-    {
-        var dateTimeOffset = await AssertType(
+        => await AssertType(
             new DateTimeOffset(1998, 4, 12, 13, 26, 38, TimeSpan.Zero),
             "1998-04-12 15:26:38+02",
             "timestamp with time zone",
             NpgsqlDbType.TimestampTz,
             DbType.DateTime,
-            isDefaultForReading: false);
-
-        Assert.That(dateTimeOffset.Offset, Is.EqualTo(TimeSpan.Zero));
-    }
+            isDefaultForReading: false,
+            comparer: (a, b) => a == b && a.Offset == TimeSpan.Zero);
 
     [Test]
     public Task Timestamptz_as_DateTimeOffset_utc_with_DbType_DateTimeOffset()
