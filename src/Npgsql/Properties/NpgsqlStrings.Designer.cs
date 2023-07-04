@@ -158,5 +158,11 @@ namespace Npgsql.Properties {
                 return ResourceManager.GetString("FullTextSearchNotEnabled", resourceCulture);
             }
         }
+        
+        internal static string WriteRecordNotSupported {
+            get {
+                return ResourceManager.GetString("WriteRecordNotSupported", resourceCulture);
+            }
+        }
     }
 }
