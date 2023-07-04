@@ -45,7 +45,8 @@ public sealed class NpgsqlDataSourceBuilder : INpgsqlTypeMapper
             new RangeTypeInfoResolver(),
             new RecordTypeInfoResolver(),
             new FullTextSearchTypeInfoResolver(),
-            new NetworkTypeInfoResolver()
+            new NetworkTypeInfoResolver(),
+            new GeometricTypeInfoResolver()
         });
 
     /// <summary>
@@ -62,6 +63,7 @@ public sealed class NpgsqlDataSourceBuilder : INpgsqlTypeMapper
             foreach (var plugin in GlobalTypeMapper.Instance.GetPluginResolvers())
                 AddTypeInfoResolver(plugin);
             // Reverse order.
+            AddTypeInfoResolver(new GeometricTypeInfoResolver());
             AddTypeInfoResolver(new NetworkTypeInfoResolver());
             AddTypeInfoResolver(new FullTextSearchTypeInfoResolver());
             AddTypeInfoResolver(new RecordTypeInfoResolver());
