@@ -18,6 +18,8 @@ namespace Npgsql;
 /// </summary>
 public sealed class NpgsqlDataSourceBuilder : INpgsqlTypeMapper
 {
+    static UnsupportedTypeInfoResolver<NpgsqlDataSourceBuilder> UnsupportedTypeInfoResolver { get; } = new();
+
     readonly NpgsqlSlimDataSourceBuilder _internalBuilder;
 
     /// <inheritdoc />
@@ -64,6 +66,7 @@ public sealed class NpgsqlDataSourceBuilder : INpgsqlTypeMapper
             foreach (var plugin in GlobalTypeMapper.Instance.GetPluginResolvers())
                 AddTypeInfoResolver(plugin);
             // Reverse order.
+            AddTypeInfoResolver(UnsupportedTypeInfoResolver);
             AddTypeInfoResolver(new ExtraConversionsResolver());
             AddTypeInfoResolver(new GeometricTypeInfoResolver());
             AddTypeInfoResolver(new NetworkTypeInfoResolver());
