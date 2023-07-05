@@ -9,21 +9,21 @@
 
 namespace Npgsql.Properties {
     using System;
-    
-    
+
+
     [System.CodeDom.Compiler.GeneratedCodeAttribute("System.Resources.Tools.StronglyTypedResourceBuilder", "4.0.0.0")]
     [System.Diagnostics.DebuggerNonUserCodeAttribute()]
     [System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
     internal class NpgsqlStrings {
-        
+
         private static System.Resources.ResourceManager resourceMan;
-        
+
         private static System.Globalization.CultureInfo resourceCulture;
-        
+
         [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute("Microsoft.Performance", "CA1811:AvoidUncalledPrivateCode")]
         internal NpgsqlStrings() {
         }
-        
+
         [System.ComponentModel.EditorBrowsableAttribute(System.ComponentModel.EditorBrowsableState.Advanced)]
         internal static System.Resources.ResourceManager ResourceManager {
             get {
@@ -34,7 +34,7 @@ namespace Npgsql.Properties {
                 return resourceMan;
             }
         }
-        
+
         [System.ComponentModel.EditorBrowsableAttribute(System.ComponentModel.EditorBrowsableState.Advanced)]
         internal static System.Globalization.CultureInfo Culture {
             get {
@@ -44,124 +44,118 @@ namespace Npgsql.Properties {
                 resourceCulture = value;
             }
         }
-        
+
         internal static string CannotUseSslVerifyWithUserCallback {
             get {
                 return ResourceManager.GetString("CannotUseSslVerifyWithUserCallback", resourceCulture);
             }
         }
-        
+
         internal static string CannotUseSslRootCertificateWithUserCallback {
             get {
                 return ResourceManager.GetString("CannotUseSslRootCertificateWithUserCallback", resourceCulture);
             }
         }
-        
+
         internal static string CannotUseSslModeRequireWithoutTrustServerCertificate {
             get {
                 return ResourceManager.GetString("CannotUseSslModeRequireWithoutTrustServerCertificate", resourceCulture);
             }
         }
-        
+
         internal static string CannotUseTrustServerCertificate {
             get {
                 return ResourceManager.GetString("CannotUseTrustServerCertificate", resourceCulture);
             }
         }
-        
+
         internal static string EncryptionDisabled {
             get {
                 return ResourceManager.GetString("EncryptionDisabled", resourceCulture);
             }
         }
-        
+
         internal static string NoMultirangeTypeFound {
             get {
                 return ResourceManager.GetString("NoMultirangeTypeFound", resourceCulture);
             }
         }
-        
+
         internal static string NotSupportedOnDataSourceCommand {
             get {
                 return ResourceManager.GetString("NotSupportedOnDataSourceCommand", resourceCulture);
             }
         }
-        
+
         internal static string NotSupportedOnDataSourceBatch {
             get {
                 return ResourceManager.GetString("NotSupportedOnDataSourceBatch", resourceCulture);
             }
         }
-        
+
         internal static string CannotSetBothPasswordProviderAndPassword {
             get {
                 return ResourceManager.GetString("CannotSetBothPasswordProviderAndPassword", resourceCulture);
             }
         }
-        
+
         internal static string PasswordProviderMissing {
             get {
                 return ResourceManager.GetString("PasswordProviderMissing", resourceCulture);
             }
         }
-        
+
         internal static string ArgumentMustBePositive {
             get {
                 return ResourceManager.GetString("ArgumentMustBePositive", resourceCulture);
             }
         }
-        
+
         internal static string CannotSpecifyTargetSessionAttributes {
             get {
                 return ResourceManager.GetString("CannotSpecifyTargetSessionAttributes", resourceCulture);
             }
         }
-        
+
         internal static string CannotReadIntervalWithMonthsAsTimeSpan {
             get {
                 return ResourceManager.GetString("CannotReadIntervalWithMonthsAsTimeSpan", resourceCulture);
             }
         }
-        
+
         internal static string PositionalParameterAfterNamed {
             get {
                 return ResourceManager.GetString("PositionalParameterAfterNamed", resourceCulture);
             }
         }
-        
+
         internal static string CannotReadInfinityValue {
             get {
                 return ResourceManager.GetString("CannotReadInfinityValue", resourceCulture);
             }
         }
-        
+
         internal static string SyncAndAsyncConnectionInitializersRequired {
             get {
                 return ResourceManager.GetString("SyncAndAsyncConnectionInitializersRequired", resourceCulture);
             }
         }
-        
+
         internal static string CannotUseValidationRootCertificateCallbackWithUserCallback {
             get {
                 return ResourceManager.GetString("CannotUseValidationRootCertificateCallbackWithUserCallback", resourceCulture);
             }
         }
-        
+
         internal static string RecordsNotEnabled {
             get {
                 return ResourceManager.GetString("RecordsNotEnabled", resourceCulture);
             }
         }
-        
+
         internal static string FullTextSearchNotEnabled {
             get {
                 return ResourceManager.GetString("FullTextSearchNotEnabled", resourceCulture);
-            }
-        }
-        
-        internal static string WriteRecordNotSupported {
-            get {
-                return ResourceManager.GetString("WriteRecordNotSupported", resourceCulture);
             }
         }
     }
