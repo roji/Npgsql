@@ -14,14 +14,14 @@ sealed partial class NpgsqlReadBuffer
         readonly NpgsqlReadBuffer _buf;
         int _start, _len, _read;
         bool _canSeek;
-        readonly bool _startCancellableOperations;
+        readonly bool _commandScoped;
         internal bool IsDisposed { get; private set; }
 
-        internal ColumnStream(NpgsqlConnector connector, bool startCancellableOperations = true)
+        internal ColumnStream(NpgsqlConnector connector, bool commandScoped = true)
         {
             _connector = connector;
             _buf = connector.ReadBuffer;
-            _startCancellableOperations = startCancellableOperations;
+            _commandScoped = commandScoped;
             IsDisposed = true;
         }
 
@@ -137,9 +137,7 @@ sealed partial class NpgsqlReadBuffer
         public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
             ValidateArguments(buffer, offset, count);
-
-            using (NoSynchronizationContextScope.Enter())
-                return ReadAsync(new Memory<byte>(buffer, offset, count), cancellationToken).AsTask();
+            return ReadAsync(new Memory<byte>(buffer, offset, count), cancellationToken).AsTask();
         }
 
 #if NETSTANDARD2_0
@@ -155,7 +153,7 @@ sealed partial class NpgsqlReadBuffer
             if (count == 0)
                 return 0;
 
-            var read = _buf.Read(span.Slice(0, count));
+            var read = _buf.Read(_commandScoped, span.Slice(0, count));
             _read += read;
 
             return read;
@@ -174,15 +172,15 @@ sealed partial class NpgsqlReadBuffer
             if (count == 0)
                 return new ValueTask<int>(0);
 
-            using (NoSynchronizationContextScope.Enter())
-                return ReadLong(this, buffer.Slice(0, count), cancellationToken);
+            return ReadLong(this, buffer.Slice(0, count), cancellationToken);
 
             static async ValueTask<int> ReadLong(ColumnStream stream, Memory<byte> buffer, CancellationToken cancellationToken = default)
             {
-                using var registration = stream._startCancellableOperations
+                using var registration = cancellationToken.CanBeCanceled
                     ? stream._connector.StartNestedCancellableOperation(cancellationToken, attemptPgCancellation: false)
                     : default;
-                var read = await stream._buf.ReadAsync(buffer, cancellationToken);
+
+                var read = await stream._buf.ReadAsync(stream._commandScoped, buffer, cancellationToken).ConfigureAwait(false);
                 stream._read += read;
                 return read;
             }
@@ -205,10 +203,7 @@ sealed partial class NpgsqlReadBuffer
 #else
         public override ValueTask DisposeAsync()
 #endif
-        {
-            using (NoSynchronizationContextScope.Enter())
-                return DisposeAsync(disposing: true, async: true);
-        }
+            => DisposeAsync(disposing: true, async: true);
 
         async ValueTask DisposeAsync(bool disposing, bool async)
         {
@@ -219,7 +214,7 @@ sealed partial class NpgsqlReadBuffer
             if (leftToSkip > 0)
             {
                 if (async)
-                    await _buf.Skip(leftToSkip, async);
+                    await _buf.Skip(leftToSkip, async).ConfigureAwait(false);
                 else
                     _buf.Skip(leftToSkip, async).GetAwaiter().GetResult();
             }
