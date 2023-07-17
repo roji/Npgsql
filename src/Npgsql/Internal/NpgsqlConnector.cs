@@ -377,7 +377,7 @@ public sealed partial class NpgsqlConnector
         _isKeepAliveEnabled = Settings.KeepAlive > 0;
         if (_isKeepAliveEnabled)
             _keepAliveTimer = new Timer(PerformKeepAlive, null, Timeout.Infinite, Timeout.Infinite);
-        
+
         DataReader = new NpgsqlDataReader(this);
 
         // TODO: Not just for automatic preparation anymore...
@@ -657,7 +657,7 @@ public sealed partial class NpgsqlConnector
                 reader.NextResult();
                 reader.Read();
             }
-                
+
             _isTransactionReadOnly = reader.GetString(0) != "off";
 
             var databaseState = UpdateDatabaseState();
@@ -1434,6 +1434,12 @@ public sealed partial class NpgsqlConnector
                 }
 
                 Debug.Assert(msg != null, "Message is null for code: " + messageCode);
+
+                // Reset flushed bytes after any RFQ or in between potentially long running operations.
+                // Just in case we'll hit that 15 exbibyte limit of a signed long...
+                if (messageCode is BackendMessageCode.ReadyForQuery or BackendMessageCode.CopyData or BackendMessageCode.NotificationResponse)
+                    ReadBuffer.ResetFlushedBytes();
+
                 return msg;
             }
         }
@@ -2104,7 +2110,7 @@ public sealed partial class NpgsqlConnector
             Monitor.Exit(CleanupLock);
         }
     }
-        
+
     void FullCleanup()
     {
         lock (CleanupLock)
@@ -2377,7 +2383,7 @@ public sealed partial class NpgsqlConnector
         // the user query wait if a keepalive is in progress.
         // If keepalive isn't enabled, we don't use the lock and rely only on the connector's
         // state (updated via Interlocked.Exchange) to detect concurrent use, on a best-effort basis.
-        return _isKeepAliveEnabled 
+        return _isKeepAliveEnabled
             ? DoStartUserActionWithKeepAlive(newState, command, cancellationToken, attemptPgCancellation)
             : DoStartUserAction(newState, command, cancellationToken, attemptPgCancellation);
 

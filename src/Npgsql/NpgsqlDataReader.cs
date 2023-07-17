@@ -50,6 +50,7 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
     internal ReaderState State = ReaderState.Disposed;
 
     internal NpgsqlReadBuffer Buffer = default!;
+    PgReader PgReader => Buffer.PgReader;
 
     /// <summary>
     /// Holds the list of statements being executed by this reader.
@@ -121,11 +122,6 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
 
     bool _isSchemaOnly;
     bool _isSequential;
-
-    /// <summary>
-    /// A stream that has been opened on a column.
-    /// </summary>
-    NpgsqlReadBuffer.ColumnStream? _columnStream;
 
     /// <summary>
     /// Used to keep track of every unique row this reader object ever traverses.
@@ -642,6 +638,7 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
             p.Value = pending.Dequeue();
         }
 
+        PgReader.CommandReset();
         State = ReaderState.BeforeResult; // Set the state back
         Buffer.ReadPosition = currentPosition; // Restore position
 
@@ -827,7 +824,8 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
         // recapture the connector's buffer on each new DataRow.
         // Note that this can happen even in sequential mode, if the row description message is big
         // (see #2003)
-        Buffer = Connector.ReadBuffer;
+        if (!ReferenceEquals(Buffer, Connector.ReadBuffer))
+            Buffer = Connector.ReadBuffer;
 
         _hasRows = true;
         _column = -1;
@@ -1437,7 +1435,7 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
 
         length = Math.Min(length, ColumnLen - dataOffset2);
 
-        var reader = Buffer.PgReader.Init(new ArraySegment<byte>(buffer, bufferOffset, length), ColumnLen, field.DataFormat);
+        var reader = PgReader.Init(new ArraySegment<byte>(buffer, bufferOffset, length), ColumnLen, field.DataFormat);
         // TODO actually make this work in the byte[] converter.
         var result = info.AsObject
             ? (Stream)info.Converter.ReadAsObject(reader)
@@ -1473,17 +1471,13 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
 
     async ValueTask<Stream> GetStreamInternal(FieldDescription field, int ordinal, bool async, CancellationToken cancellationToken = default)
     {
-        if (_columnStream is { IsDisposed: false })
-            ThrowHelper.ThrowInvalidOperationException("A stream is already open for this reader");
-
         using var registration = Connector.StartNestedCancellableOperation(cancellationToken, attemptPgCancellation: false);
 
         await SeekToColumn(ordinal, async);
         if (ColumnLen == -1)
             ThrowHelper.ThrowInvalidCastException_NoValue(field);
 
-        PosInColumn += ColumnLen;
-        return _columnStream = (NpgsqlReadBuffer.ColumnStream)Buffer.GetStream(ColumnLen, !_isSequential);
+        return PgReader.GetStream();
     }
 
     #endregion
@@ -1627,13 +1621,23 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
         var field = CheckRowAndGetField(ordinal);
         var info = field.GetConverterInfo(typeof(TextReader));
 
+        // Call Reset before SeekToColumn means we cause an exception to be thrown if a user is already holding a reader.
+        PgReader.Reset();
         await SeekToColumn(ordinal, async);
         if (ColumnLen is -1)
             ThrowHelper.ThrowInvalidCastException_NoValue(field);
 
-        var reader = Buffer.PgReader.Init(ColumnLen, field.DataFormat);
         Debug.Assert(info.BufferRequirement == Size.Zero);
-        return (TextReader)(async ? await info.Converter.ReadAsObjectAsync(reader, cancellationToken) : info.Converter.ReadAsObject(reader));
+
+        // We take current remaining bytes as the TextReader implementation might read/skip a few before handing off a stream
+        // It could also decide to hand of a copy of the data, which should also be properly supported.
+        var prevRemaining = PgReader.ByteCountRemaining;
+        var result = (TextReader)(async
+            ? await info.Converter.ReadAsObjectAsync(PgReader, cancellationToken)
+            : info.Converter.ReadAsObject(PgReader));
+        // Here we compute the difference, the remainder of the column pos will be incremented by callers of DisposeUserActiveStream()
+        PosInColumn += prevRemaining - PgReader.ByteCountRemaining;
+        return result;
     }
 
     #endregion
@@ -1703,11 +1707,10 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
 
         // We don't handle exceptions or update PosInColumn
         // With non-sequential reads we always just move to the start/end of the column
-        var reader = Buffer.PgReader.Init(ColumnLen, field.DataFormat);
-        reader.BufferData(info.BufferRequirement);
+        PgReader.BufferData(info.BufferRequirement);
         return info.AsObject
-            ? (T)info.Converter.ReadAsObject(reader)
-            : info.GetConverter<T>().Read(reader);
+            ? (T)info.Converter.ReadAsObject(PgReader)
+            : info.GetConverter<T>().Read(PgReader);
     }
 
     async ValueTask<T> GetFieldValueSequential<T>(int column, bool async, CancellationToken cancellationToken = default)
@@ -1732,20 +1735,17 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
                 ThrowHelper.ThrowInvalidCastException_NoValue(field);
             }
 
-
-            var reader = Buffer.PgReader.Init(ColumnLen, field.DataFormat);
             if (async)
             {
-                await reader.BufferDataAsync(info.BufferRequirement, cancellationToken);
+                await PgReader.BufferDataAsync(info.BufferRequirement, cancellationToken);
                 return info.AsObject
-                    ? (T)await info.Converter.ReadAsObjectAsync(reader, cancellationToken)
-                    : await info.GetConverter<T>().ReadAsync(reader, cancellationToken);
+                    ? (T)await info.Converter.ReadAsObjectAsync(PgReader, cancellationToken)
+                    : await info.GetConverter<T>().ReadAsync(PgReader, cancellationToken);
             }
-
-            reader.BufferData(info.BufferRequirement);
+            PgReader.BufferData(info.BufferRequirement);
             return info.AsObject
-                ? (T)info.Converter.ReadAsObject(reader)
-                : info.GetConverter<T>().Read(reader);
+                ? (T)info.Converter.ReadAsObject(PgReader)
+                : info.GetConverter<T>().Read(PgReader);
         }
         catch
         {
@@ -1791,9 +1791,8 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
         var position = Buffer.ReadPosition;
         try
         {
-            var reader = Buffer.PgReader.Init(ColumnLen, field.DataFormat);
-            reader.BufferData(info.BufferRequirement);
-            result = info.Converter.ReadAsObject(reader);
+            PgReader.BufferData(info.BufferRequirement);
+            result = info.Converter.ReadAsObject(PgReader);
         }
         catch
         {
@@ -2078,11 +2077,10 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
     void SeekToColumnNonSequential(int ordinal)
     {
         // Shut down any streaming going on on the column
-        if (_columnStream != null)
-        {
-            _columnStream.Dispose();
-            _columnStream = null;
-        }
+        _ = PgReader.DisposeUserActiveStream(async: false).GetAwaiter().GetResult();
+
+        if (_column != ordinal)
+            PgReader.Commit();
 
         for (var lastColumnRead = _columns.Count; ordinal >= lastColumnRead; lastColumnRead++)
         {
@@ -2095,6 +2093,9 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
         }
 
         (Buffer.ReadPosition, ColumnLen) = _columns[ordinal];
+        if (_column != ordinal && ColumnLen >= 0)
+            PgReader.Init(ColumnLen, CheckRowAndGetField(ordinal).DataFormat);
+
         _column = ordinal;
         PosInColumn = 0;
     }
@@ -2110,19 +2111,16 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
         if (ordinal < _column || (!resumable && ordinal == _column))
             throw new InvalidOperationException($"Invalid attempt to read from column ordinal '{ordinal}'. With CommandBehavior.SequentialAccess, you may only read from column ordinal '{_column}' or greater.");
 
+        // Shut down any streaming going on on the column
+        // Dispose() consumes the length number of bytes it was initialized at, usually the entire column.
+        PosInColumn += await PgReader.DisposeUserActiveStream(async);
+
         if (ordinal == _column)
             return;
 
-        // Need to seek forward
+        PgReader.Commit();
 
-        // Shut down any streaming going on on the column
-        if (_columnStream != null)
-        {
-            _columnStream.Dispose();
-            _columnStream = null;
-            // Disposing the stream leaves us at the end of the column
-            PosInColumn = ColumnLen;
-        }
+        // Need to seek forward
 
         // Skip to end of column if needed
         // TODO: Simplify by better initializing _columnLen/_posInColumn
@@ -2141,6 +2139,10 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
 
         await Buffer.Ensure(4, async);
         ColumnLen = Buffer.ReadInt32();
+
+        if (ColumnLen >= 0)
+            PgReader.Init(ColumnLen, CheckRowAndGetField(ordinal).DataFormat);
+
         PosInColumn = 0;
         _column = ordinal;
     }
@@ -2194,13 +2196,9 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
 
         async Task ConsumeRowSequential(bool async)
         {
-            if (_columnStream != null)
-            {
-                _columnStream.Dispose();
-                _columnStream = null;
-                // Disposing the stream leaves us at the end of the column
-                PosInColumn = ColumnLen;
-            }
+            // Shut down any streaming going on on the column
+            // Dispose() consumes the length number of bytes it was initialized at, usually the entire column.
+            PosInColumn += await PgReader.DisposeUserActiveStream(async);
 
             // TODO: Potential for code-sharing with ReadColumn above, which also skips
             // Skip to end of column if needed
@@ -2223,14 +2221,9 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
     void ConsumeRowNonSequential()
     {
         Debug.Assert(State == ReaderState.InResult || State == ReaderState.BeforeResult);
-
-        if (_columnStream is not null)
-        {
-            _columnStream.Dispose();
-            _columnStream = null;
-            // Disposing the stream leaves us at the end of the column
-            PosInColumn = ColumnLen;
-        }
+        // Shut down any streaming going on on the column
+        // Dispose() consumes the length number of bytes it was initialized at, usually the entire column.
+        PosInColumn += PgReader.DisposeUserActiveStream(async: false).GetAwaiter().GetResult();
         Buffer.ReadPosition = _dataMsgEnd;
     }
 
@@ -2274,10 +2267,11 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
             break;
         }
 
-        if (column < 0 || column >= RowDescription!.Count)
-            ThrowColumnOutOfRange(RowDescription!.Count);
+        var columns = RowDescription;
+        if (column < 0 || column >= columns!.Count)
+            ThrowColumnOutOfRange(columns!.Count);
 
-        return RowDescription[column];
+        return columns[column];
     }
 
     /// <summary>
@@ -2289,10 +2283,11 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
         if (RowDescription is null)
             ThrowHelper.ThrowInvalidOperationException("No resultset is currently being traversed");
 
-        if (column < 0 || column >= RowDescription.Count)
-            ThrowColumnOutOfRange(RowDescription.Count);
+        var columns = RowDescription;
+        if (column < 0 || column >= columns.Count)
+            ThrowColumnOutOfRange(columns.Count);
 
-        return RowDescription[column];
+        return columns[column];
     }
 
     void CheckClosedOrDisposed()

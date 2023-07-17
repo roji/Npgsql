@@ -12,9 +12,12 @@ sealed partial class NpgsqlReadBuffer
     {
         readonly NpgsqlConnector _connector;
         readonly NpgsqlReadBuffer _buf;
-        int _start, _len, _read;
+        int _start;
+        int _read;
         bool _canSeek;
         readonly bool _commandScoped;
+        /// Does not throw ODE.
+        internal int CurrentLength { get; private set; }
         internal bool IsDisposed { get; private set; }
 
         internal ColumnStream(NpgsqlConnector connector, bool commandScoped = true)
@@ -30,7 +33,7 @@ sealed partial class NpgsqlReadBuffer
             Debug.Assert(!canSeek || _buf.ReadBytesLeft >= len,
                 "Seekable stream constructed but not all data is in buffer (sequential)");
             _start = _buf.ReadPosition;
-            _len = len;
+            CurrentLength = len;
             _read = 0;
             _canSeek = canSeek;
             IsDisposed = false;
@@ -47,7 +50,7 @@ sealed partial class NpgsqlReadBuffer
             get
             {
                 CheckDisposed();
-                return _len;
+                return CurrentLength;
             }
         }
 
@@ -100,8 +103,8 @@ sealed partial class NpgsqlReadBuffer
             }
             case SeekOrigin.End:
             {
-                var tempPosition = unchecked(_len + (int)offset);
-                if (unchecked(_len + offset) < _start || tempPosition < _start)
+                var tempPosition = unchecked(CurrentLength + (int)offset);
+                if (unchecked(CurrentLength + offset) < _start || tempPosition < _start)
                     throw new IOException(seekBeforeBegin);
                 _buf.ReadPosition = tempPosition;
                 return tempPosition;
@@ -148,7 +151,7 @@ sealed partial class NpgsqlReadBuffer
         {
             CheckDisposed();
 
-            var count = Math.Min(span.Length, _len - _read);
+            var count = Math.Min(span.Length, CurrentLength - _read);
 
             if (count == 0)
                 return 0;
@@ -167,7 +170,7 @@ sealed partial class NpgsqlReadBuffer
         {
             CheckDisposed();
 
-            var count = Math.Min(buffer.Length, _len - _read);
+            var count = Math.Min(buffer.Length, CurrentLength - _read);
 
             if (count == 0)
                 return new ValueTask<int>(0);
@@ -210,7 +213,7 @@ sealed partial class NpgsqlReadBuffer
             if (IsDisposed || !disposing)
                 return;
 
-            var leftToSkip = _len - _read;
+            var leftToSkip = CurrentLength - _read;
             if (leftToSkip > 0)
             {
                 if (async)
