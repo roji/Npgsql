@@ -20,8 +20,8 @@
 
     <!-- Tests -->
     <PackageVersion Include="NUnit" Version="3.13.3" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="7.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="7.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="8.0.0-preview.6.23329.7" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="8.0.0-preview.6.23329.7" />
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.6.3" />
     <PackageVersion Include="NUnit3TestAdapter" Version="4.5.0" />
@@ -29,7 +29,8 @@
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.4.5" />
     <PackageVersion Include="GitHubActionsTestLogger" Version="2.3.2" />
     <PackageVersion Include="AdoNet.Specification.Tests" Version="2.0.0-alpha8" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="7.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0-preview.6.23329.7" />
+    <PackageVersion Include="Microsoft.Extensions.Telemetry.Testing" Version="8.0.0-preview.6.23360.2" />
 
     <!-- Benchmarks -->
     <PackageVersion Include="BenchmarkDotNet" Version="0.13.6" />

@@ -1,4 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk" ToolsVersion="15.0">
+
+  <PropertyGroup>
+    <EnableUnsafeBinaryFormatterSerialization>true</EnableUnsafeBinaryFormatterSerialization>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="NUnit" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
@@ -6,11 +11,11 @@
     <PackageReference Include="Microsoft.CSharp" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="Microsoft.Extensions.Telemetry.Testing" />
   </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="../../src/Npgsql/Npgsql.csproj" />
   </ItemGroup>
-  <PropertyGroup>
-    <EnableUnsafeBinaryFormatterSerialization>true</EnableUnsafeBinaryFormatterSerialization>
-  </PropertyGroup>
+
 </Project>
