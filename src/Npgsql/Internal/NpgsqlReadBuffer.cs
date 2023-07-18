@@ -146,6 +146,7 @@ sealed partial class NpgsqlReadBuffer : IDisposable
             try
             {
                 var read = Underlying.Read(buffer);
+                _flushedBytes = unchecked(_flushedBytes + read);
                 NpgsqlEventSource.Log.BytesRead(read);
                 return read;
             }
@@ -210,6 +211,7 @@ sealed partial class NpgsqlReadBuffer : IDisposable
             try
             {
                 var read = await Underlying.ReadAsync(buffer, finalCt).ConfigureAwait(false);
+                _flushedBytes = unchecked(_flushedBytes + read);
                 Cts.Stop();
                 NpgsqlEventSource.Log.BytesRead(read);
                 return read;
