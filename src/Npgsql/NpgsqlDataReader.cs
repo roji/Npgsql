@@ -113,12 +113,6 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
     bool _isSchemaOnly;
     bool _isSequential;
 
-    /// <summary>
-    /// Used to keep track of every unique row this reader object ever traverses.
-    /// This is used to detect whether nested DbDataReaders are still valid.
-    /// </summary>
-    internal ulong UniqueRowId;
-
     internal NpgsqlNestedDataReader? CachedFreeNestedDataReader;
 
     readonly ILogger _commandLogger;
@@ -160,7 +154,6 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
     {
         CheckClosedOrDisposed();
 
-        UniqueRowId++;
         var fastRead = TryFastRead();
         return fastRead.HasValue
             ? fastRead.Value
@@ -178,7 +171,6 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
     {
         CheckClosedOrDisposed();
 
-        UniqueRowId++;
         var fastRead = TryFastRead();
         if (fastRead.HasValue)
             return fastRead.Value ? PGUtil.TrueTask : PGUtil.FalseTask;
@@ -1360,6 +1352,10 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
             throw new InvalidCastException("GetData() not supported for type " + field.TypeDisplayName);
 
         var columnLength = SeekToColumn(async: false, ordinal, field, resumableOp: true).GetAwaiter().GetResult();
+
+        if (PgReader.CurrentOffset > 0)
+            PgReader.Rewind(PgReader.CurrentOffset);
+
         if (columnLength == -1)
             ThrowHelper.ThrowInvalidCastException_NoValue(field);
 
@@ -1367,11 +1363,11 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
         if (reader != null)
         {
             CachedFreeNestedDataReader = null;
-            reader.Init(UniqueRowId, compositeType);
+            reader.Init(compositeType);
         }
         else
         {
-            reader = new NpgsqlNestedDataReader(this, null, UniqueRowId, 1, compositeType);
+            reader = new NpgsqlNestedDataReader(this, null, 1, compositeType);
         }
         if (isArray)
             reader.InitArray();
@@ -1411,15 +1407,10 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
             return columnLength;
 
         // Move to offset
-        if (PgReader.CurrentOffset > dataOffset)
-        {
-            if (_isSequential)
-                ThrowHelper.ThrowInvalidOperationException("Attempt to read a position in the column which has already been read");
+        if (_isSequential && PgReader.CurrentOffset > dataOffset)
+            ThrowHelper.ThrowInvalidOperationException("Attempt to read a position in the column which has already been read");
 
-            PgReader.Rewind(PgReader.CurrentOffset - (int)dataOffset);
-        }
-        else if (PgReader.CurrentOffset < dataOffset)
-            PgReader.Consume((int)dataOffset - PgReader.CurrentOffset);
+        PgReader.Seek((int)dataOffset);
 
         // At offset, read into buffer.
         length = Math.Min(length, PgReader.CurrentRemaining);
@@ -1909,8 +1900,7 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
             committed = true;
             if (TrySeekBuffered(ordinal, out var columnLength))
             {
-                if (!resuming)
-                    PgReader.Init(columnLength, field.DataFormat, resumableOp);
+                PgReader.Init(columnLength, field.DataFormat, resumableOp);
                 return new(columnLength);
             }
 
@@ -2000,8 +1990,6 @@ public sealed class NpgsqlDataReader : DbDataReader, IDbColumnSchemaGenerator
     Task ConsumeRow(bool async)
     {
         Debug.Assert(State == ReaderState.InResult || State == ReaderState.BeforeResult);
-
-        UniqueRowId++;
 
         if (!_canConsumeRowNonSequentially)
             return ConsumeRowSequential(async);
