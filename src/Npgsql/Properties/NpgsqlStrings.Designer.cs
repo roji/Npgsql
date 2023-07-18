@@ -159,6 +159,12 @@ namespace Npgsql.Properties {
             }
         }
         
+        internal static string LTreeNotEnabled {
+            get {
+                return ResourceManager.GetString("LTreeNotEnabled", resourceCulture);
+            }
+        }
+        
         internal static string RangesNotEnabled {
             get {
                 return ResourceManager.GetString("RangesNotEnabled", resourceCulture);
