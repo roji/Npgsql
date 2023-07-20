@@ -8,6 +8,7 @@ namespace Npgsql.Internal.Resolvers;
 sealed class LTreeTypeInfoResolver : IPgTypeInfoResolver
 {
     const byte LTreeVersion = 1;
+
     TypeInfoMappingCollection Mappings { get; }
 
     public LTreeTypeInfoResolver()
@@ -24,13 +25,13 @@ sealed class LTreeTypeInfoResolver : IPgTypeInfoResolver
     static void AddInfos(TypeInfoMappingCollection mappings)
     {
         mappings.AddType<string>("ltree",
-            static (options, mapping, _) => mapping.CreateInfo(options, new LTreeConverter(LTreeVersion, options.TextEncoding)),
+            static (options, mapping, _) => mapping.CreateInfo(options, new LengthPrefixedTextConverter(LTreeVersion, options.TextEncoding)),
             isDefault: true);
         mappings.AddType<string>("lquery",
-            static (options, mapping, _) => mapping.CreateInfo(options, new LTreeConverter(LTreeVersion, options.TextEncoding)),
+            static (options, mapping, _) => mapping.CreateInfo(options, new LengthPrefixedTextConverter(LTreeVersion, options.TextEncoding)),
             isDefault: true);
         mappings.AddType<string>("ltxtquery",
-            static (options, mapping, _) => mapping.CreateInfo(options, new LTreeConverter(LTreeVersion, options.TextEncoding)),
+            static (options, mapping, _) => mapping.CreateInfo(options, new LengthPrefixedTextConverter(LTreeVersion, options.TextEncoding)),
             isDefault: true);
     }
 

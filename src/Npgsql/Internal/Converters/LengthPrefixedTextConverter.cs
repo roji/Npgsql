@@ -5,12 +5,12 @@ using System.Threading.Tasks;
 
 namespace Npgsql.Internal.Converters;
 
-sealed class LTreeConverter : PgStreamingConverter<string>
+sealed class LengthPrefixedTextConverter : PgStreamingConverter<string>
 {
     readonly byte _expectedVersionPrefix;
     readonly Encoding _encoding;
 
-    public LTreeConverter(byte expectedVersionPrefix, Encoding encoding)
+    public LengthPrefixedTextConverter(byte expectedVersionPrefix, Encoding encoding)
         => (_expectedVersionPrefix, _encoding) = (expectedVersionPrefix, encoding);
 
     public override string Read(PgReader reader)
@@ -30,6 +30,7 @@ sealed class LTreeConverter : PgStreamingConverter<string>
 
         return _encoding.GetString(async
             ? await reader.ReadBytesAsync(reader.CurrentRemaining, cancellationToken).ConfigureAwait(false)
+            // ReSharper disable once MethodHasAsyncOverloadWithCancellation
             : reader.ReadBytes(reader.CurrentRemaining));
     }
 

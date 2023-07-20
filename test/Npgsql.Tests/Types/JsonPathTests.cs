@@ -1,4 +1,5 @@
-﻿using System.Threading.Tasks;
+﻿using System.Data;
+using System.Threading.Tasks;
 using NpgsqlTypes;
 using NUnit.Framework;
 using static Npgsql.Tests.TestUtil;
@@ -10,37 +11,28 @@ public class JsonPathTests : MultiplexingTestBase
     public JsonPathTests(MultiplexingMode multiplexingMode)
         : base(multiplexingMode) { }
 
-    static readonly object[] ReadWriteCases = new[]
-    {
-        new object[] { "'$'", "$" },
-        new object[] { "'$\"varname\"'", "$\"varname\"" },
-    };
+    [Test]
+    [TestCase("$")]
+    [TestCase("$\"varname\"")]
+    public Task JsonPath(string jsonPath)
+        => AssertType(
+            jsonPath, jsonPath, "jsonpath", NpgsqlDbType.JsonPath, isDefaultForWriting: false, isNpgsqlDbTypeInferredFromClrType: false,
+            inferredDbType: DbType.String);
 
     [Test]
-    [TestCaseSource(nameof(ReadWriteCases))]
-    public async Task Read(string query, string expected)
+    public async Task Read_with_GetTextReader()
     {
-        using var conn = await OpenConnectionAsync();
-        MinimumPgVersion(conn, "12.0", "The jsonpath type was introduced in PostgreSQL 12");
+        await using var command = DataSource.CreateCommand("SELECT '$.foo[3].bar'::jsonpath");
+        await using var reader = await command.ExecuteReaderAsync();
 
-        using var cmd = new NpgsqlCommand($"SELECT {query}::jsonpath", conn);
-        using var rdr = await cmd.ExecuteReaderAsync();
-
-        rdr.Read();
-        Assert.That(rdr.GetFieldValue<string>(0), Is.EqualTo(expected));
-        Assert.That(rdr.GetTextReader(0).ReadToEnd(), Is.EqualTo(expected));
+        await reader.ReadAsync();
+        Assert.That(reader.GetTextReader(0).ReadToEnd(), Is.EqualTo("$.foo[3].bar"));
     }
 
-    [Test]
-    [TestCaseSource(nameof(ReadWriteCases))]
-    public async Task Write(string query, string expected)
+    [OneTimeSetUp]
+    public async Task SetUp()
     {
-        using var conn = await OpenConnectionAsync();
+        await using var conn = await OpenConnectionAsync();
         MinimumPgVersion(conn, "12.0", "The jsonpath type was introduced in PostgreSQL 12");
-
-        using var cmd = new NpgsqlCommand($"SELECT 'Passed' WHERE @p::text = {query}::text", conn) { Parameters = { new NpgsqlParameter("p", NpgsqlDbType.JsonPath) { Value = expected } } };
-        using var rdr = await cmd.ExecuteReaderAsync();
-
-        Assert.True(rdr.Read());
     }
 }

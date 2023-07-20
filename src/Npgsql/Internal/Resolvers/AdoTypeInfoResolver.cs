@@ -17,6 +17,8 @@ namespace Npgsql.Internal.Resolvers;
 // Baseline types that are always supported.
 class AdoTypeInfoResolver : IPgTypeInfoResolver
 {
+    const byte JsonPathVersion = 1;
+
     public AdoTypeInfoResolver()
     {
         Mappings = new TypeInfoMappingCollection();
@@ -208,6 +210,11 @@ class AdoTypeInfoResolver : IPgTypeInfoResolver
             static (options, mapping, _) => mapping.CreateInfo(options, new HstoreConverter<IDictionary<string, string?>>(options.TextEncoding)));
         mappings.AddType<ImmutableDictionary<string, string?>>("hstore",
             static (options, mapping, _) => mapping.CreateInfo(options, new HstoreConverter<ImmutableDictionary<string, string?>>(options.TextEncoding)));
+
+        // Jsonpath
+        mappings.AddType<string>(DataTypeNames.JsonPath,
+            static (options, mapping, _) =>
+                mapping.CreateInfo(options, new LengthPrefixedTextConverter(JsonPathVersion, options.TextEncoding)), isDefault: true);
 
         // Unknown
         mappings.AddType<string>(DataTypeNames.Unknown,
