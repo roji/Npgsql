@@ -110,7 +110,6 @@ public class PgWriter
             throw new InvalidOperationException("Invalid concurrent use or PgWriter was not reset properly.");
 
         _typeCatalog = typeCatalog;
-        Ensure();
         return this;
     }
 
