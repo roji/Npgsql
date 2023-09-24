@@ -457,7 +457,7 @@ public readonly record struct NpgsqlInet
     public static explicit operator IPAddress(NpgsqlInet inet)
         => inet.Address;
 
-    public static explicit operator NpgsqlInet(IPAddress ip)
+    public static implicit operator NpgsqlInet(IPAddress ip)
         => new(ip);
 
     public void Deconstruct(out IPAddress address, out byte netmask)
@@ -496,7 +496,7 @@ public readonly record struct NpgsqlCidr
             Netmask = byte.Parse(segments[1]);
             return;
 
-        case { Length: 1 } segments:
+        case { Length: 1 }:
             throw new FormatException("Missing netmask");
         default:
             throw new FormatException("Invalid number of parts in CIDR specification");
@@ -511,6 +511,9 @@ public readonly record struct NpgsqlCidr
         address = Address;
         netmask = Netmask;
     }
+
+    public static implicit operator NpgsqlInet(NpgsqlCidr cidr)
+        => new(cidr.Address, cidr.Netmask);
 }
 
 /// <summary>
